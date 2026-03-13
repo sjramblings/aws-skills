@@ -8,7 +8,7 @@ The Runtime service provides a secure, serverless hosting environment for deploy
 |---------|-------------|
 | **Framework Agnostic** | Works with LangGraph, Strands, CrewAI, or custom agents |
 | **Model Flexibility** | Supports any LLM (Bedrock, Claude, Gemini, OpenAI) |
-| **Protocol Support** | MCP (Model Context Protocol) and A2A (Agent to Agent) |
+| **Protocol Support** | MCP (Model Context Protocol), A2A (Agent to Agent), and AGUI (Agent User Interaction) |
 | **Session Isolation** | Dedicated microVM per session with isolated CPU, memory, filesystem |
 | **Extended Execution** | Up to 8 hours for long-running workloads |
 | **100MB Payloads** | Handle multimodal content (text, images, audio, video) |
@@ -147,6 +147,64 @@ aws bedrock-agentcore-control delete-agent-runtime \
   --region us-west-2
 ```
 
+### List Runtime Versions
+```bash
+aws bedrock-agentcore-control list-agent-runtime-versions \
+  --agent-runtime-id <RUNTIME_ID> \
+  --region us-west-2
+```
+
+## Endpoint Management
+
+Endpoints are addressable access points to runtime versions. A `DEFAULT` endpoint is created automatically.
+
+### Create Endpoint
+```bash
+aws bedrock-agentcore-control create-agent-runtime-endpoint \
+  --agent-runtime-id <RUNTIME_ID> \
+  --endpoint-name my-endpoint \
+  --region us-west-2
+```
+
+### Get Endpoint
+```bash
+aws bedrock-agentcore-control get-agent-runtime-endpoint \
+  --agent-runtime-id <RUNTIME_ID> \
+  --endpoint-identifier <ENDPOINT_ID> \
+  --region us-west-2
+```
+
+### List Endpoints
+```bash
+aws bedrock-agentcore-control list-agent-runtime-endpoints \
+  --agent-runtime-id <RUNTIME_ID> \
+  --region us-west-2
+```
+
+### Update Endpoint
+```bash
+aws bedrock-agentcore-control update-agent-runtime-endpoint \
+  --agent-runtime-id <RUNTIME_ID> \
+  --endpoint-identifier <ENDPOINT_ID> \
+  --region us-west-2
+```
+
+### Delete Endpoint
+```bash
+aws bedrock-agentcore-control delete-agent-runtime-endpoint \
+  --agent-runtime-id <RUNTIME_ID> \
+  --endpoint-identifier <ENDPOINT_ID> \
+  --region us-west-2
+```
+
+## Deployment Methods
+
+### Container Deployment (Default)
+Use ECR container images with Strands, LangGraph, CrewAI, or custom frameworks. See Quick Start above.
+
+### Direct Code Deployment (S3 Zip)
+For simple agents: upload a zip file to S3 containing code that implements `/invocations` (POST) and `/ping` (GET) endpoints. Pass `runtimeArtifact` with S3 location instead of container URI.
+
 ## Long-Running Agents
 
 For workloads exceeding request/response cycles (up to 8 hours):
@@ -189,6 +247,8 @@ async def handle_request(request, context):
 | **LangGraph** | Graph-based agent workflows |
 | **Strands** | AWS-native agent framework |
 | **CrewAI** | Multi-agent collaboration |
+| **Google ADK** | Google Agent Development Kit |
+| **OpenAI Agents SDK** | OpenAI agent framework |
 | **Custom** | Any Python-based agent |
 
 ## Troubleshooting

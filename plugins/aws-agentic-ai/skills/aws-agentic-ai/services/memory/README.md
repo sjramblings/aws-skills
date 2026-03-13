@@ -99,6 +99,8 @@ aws bedrock-agentcore-control create-memory \
 
 ### Using Memory with SDK
 
+> **Note**: SDK import paths (e.g., `bedrock_agentcore.memory`) are illustrative — verify with the latest SDK documentation as these may change.
+
 ```python
 from bedrock_agentcore.memory import MemoryClient
 

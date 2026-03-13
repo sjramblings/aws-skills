@@ -132,19 +132,8 @@ Credential management is a cross-cutting concern across all AgentCore services. 
 ### Pattern 1: Centralized Identity, Distributed Usage
 
 ```
-┌─────────────────────────────────────┐
-│  Identity Service                   │
-│  - Stores ALL credentials           │
-│  - Manages rotation                 │
-│  - Provides audit logs              │
-└──────────┬──────────────────────────┘
-           │
-           ├────────────┬────────────┬────────────┐
-           ▼            ▼            ▼            ▼
-    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-    │ Gateway  │ │ Runtime  │ │  Memory  │ │  Other   │
-    │  Uses    │ │  Uses    │ │  Uses    │ │  Uses    │
-    └──────────┘ └──────────┘ └──────────┘ └──────────┘
+Identity Service (stores all credentials, manages rotation, audit logs)
+  → Gateway, Runtime, Memory, Other services (consume credentials)
 ```
 
 **Benefits**:
@@ -168,17 +157,8 @@ aws bedrock-agentcore-control create-api-key-credential-provider \
 ### Pattern 2: Service-Specific Credentials
 
 ```
-┌─────────────────────────────────────┐
-│  Identity Service                   │
-│  - Stores credentials per service   │
-└──────────┬──────────────────────────┘
-           │
-    ┌──────┴──────┬────────┬─────────┐
-    ▼             ▼        ▼         ▼
-┌─────────┐ ┌─────────┐ ┌──────┐ ┌─────┐
-│ Gateway │ │ Runtime │ │Memory││Other│
-│  Cred   │ │  Cred   │ │ Cred ││Cred │
-└─────────┘ └─────────┘ └──────┘ └─────┘
+Identity Service (stores per-service credentials)
+  → Gateway Cred, Runtime Cred, Memory Cred, Other Cred (each isolated)
 ```
 
 **Benefits**:
@@ -201,22 +181,9 @@ aws bedrock-agentcore-control create-api-key-credential-provider \
 ### Pattern 3: Tiered (Master + Service)
 
 ```
-┌─────────────────────────────────────┐
-│  Identity Service                   │
-│  - Master credential                │
-│  - Per-service credentials          │
-└──────────┬──────────────────────────┘
-           │
-    ┌──────┴──────┐
-    ▼             ▼
-┌─────────┐ ┌─────────────┐
-│ Master  │ │   Services  │
-│  Cred   │ │   - Gateway │ │
-└────┬────┘ │   - Runtime │
-     │      │   - Memory  │
-     └──────┤   (each has │
-            │ own creds)  │
-            └─────────────┘
+Identity Service (master credential + per-service credentials)
+  → Master Cred (critical APIs, emergency backup)
+  → Per-service Creds: Gateway, Runtime, Memory (each with own credentials)
 ```
 
 **Use Cases**:
@@ -309,38 +276,27 @@ echo "Step 4: Delete old credential"
 
 ### Pattern: Credential Fallback
 
-```typescript
-// Try primary credential, fallback to backup
-async function callWithFallback(provider: string) {
-  try {
-    return await callAPI(provider);
-  } catch (error) {
-    if (error.code === 'InvalidAPICredentials') {
-      // Fallback to backup provider
-      return await callAPI(`${provider}-backup`);
-    }
-    throw error;
-  }
-}
+```python
+# Try primary credential, fallback to backup
+def call_with_fallback(provider_name: str):
+    try:
+        return call_api(provider_name)
+    except InvalidAPICredentialsError:
+        return call_api(f"{provider_name}-backup")
 ```
 
 ### Pattern: Rate Limiting with Credential Pool
 
-```typescript
-// Rotate through multiple credentials to avoid rate limits
-const credentialPool = [
-  'cred-1',
-  'cred-2',
-  'cred-3'
-];
+```bash
+# Create multiple credential providers for rate limit distribution
+aws bedrock-agentcore-control create-api-key-credential-provider \
+  --name MyAPI-Pool-1 --api-key "KEY_1"
+aws bedrock-agentcore-control create-api-key-credential-provider \
+  --name MyAPI-Pool-2 --api-key "KEY_2"
+aws bedrock-agentcore-control create-api-key-credential-provider \
+  --name MyAPI-Pool-3 --api-key "KEY_3"
 
-let currentIndex = 0;
-
-function getNextCredential(): string {
-  const credential = credentialPool[currentIndex];
-  currentIndex = (currentIndex + 1) % credentialPool.length;
-  return credential;
-}
+# Distribute gateway targets across providers
 ```
 
 ## Troubleshooting Credential Issues

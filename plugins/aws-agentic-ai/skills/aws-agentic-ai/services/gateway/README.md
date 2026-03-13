@@ -2,12 +2,57 @@
 
 The Gateway service converts REST APIs into MCP tools that AI agents can use. It handles authentication, schema validation, and request routing.
 
-## Quick Start
+## Gateway Lifecycle
 
-### Prerequisites
-- AWS CLI configured with appropriate permissions
-- An existing Gateway (created via AWS Console or CLI)
-- OpenAPI schema for your target API
+### Create a Gateway
+
+```bash
+aws bedrock-agentcore-control create-gateway \
+  --gateway-name my-gateway \
+  --region us-west-2
+```
+
+### List Gateways
+
+```bash
+aws bedrock-agentcore-control list-gateways --region us-west-2
+```
+
+### Get Gateway Details
+
+```bash
+aws bedrock-agentcore-control get-gateway \
+  --gateway-identifier <GATEWAY_ID> \
+  --region us-west-2
+```
+
+### Update Gateway
+
+```bash
+aws bedrock-agentcore-control update-gateway \
+  --gateway-identifier <GATEWAY_ID> \
+  --region us-west-2
+```
+
+### Delete Gateway
+
+```bash
+aws bedrock-agentcore-control delete-gateway \
+  --gateway-identifier <GATEWAY_ID> \
+  --region us-west-2
+```
+
+## Gateway Targets
+
+### Target Types
+
+| Target Type | Description | Outbound Auth |
+|-------------|-------------|---------------|
+| **Lambda function** | Invoke a Lambda directly | IAM |
+| **OpenAPI schema** | Call any REST API described by OpenAPI spec | OAuth 2LO/3LO, API Key |
+| **Smithy schema** | Call AWS-style APIs described by Smithy model | IAM, OAuth 2LO/3LO |
+| **MCP server** | Connect to an existing MCP server | OAuth 2LO |
+| **API Gateway** | Route through API Gateway endpoint | IAM, API Key |
 
 ### Deploy a Gateway Target
 
@@ -42,6 +87,20 @@ aws bedrock-agentcore-control get-gateway-target \
   --region us-west-2
 ```
 
+### Synchronize MCP Server Targets
+
+For MCP server targets, auto-discover tools exposed by the server:
+
+```bash
+aws bedrock-agentcore-control synchronize-gateway-targets \
+  --gateway-identifier <GATEWAY_ID> \
+  --region us-west-2
+```
+
+### Pre-Built Integrations
+
+AgentCore Gateway offers 1-click setup for popular SaaS services: Salesforce, Slack, Jira, Asana, Zendesk, and more. These create pre-configured targets with OAuth authentication.
+
 ## Authentication Options
 
 ### Outbound (Accessing External APIs)
@@ -59,21 +118,20 @@ aws bedrock-agentcore-control get-gateway-target \
 - **JWT**: Tokens from identity providers (Cognito, Entra ID)
 - **No Auth**: Open access (use with caution)
 
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Deployment Strategies](deployment-strategies.md) | Credential provider patterns, multi-environment setup, key rotation |
-| [Troubleshooting Guide](troubleshooting-guide.md) | Common errors, diagnosis steps, solutions |
-| [Deploy Template Script](deploy-template.sh) | Automated deployment script |
-| [Validate Deployment Script](validate-deployment.sh) | Post-deployment verification |
-
 ## Common Operations
 
 ### List Gateway Targets
 ```bash
 aws bedrock-agentcore-control list-gateway-targets \
   --gateway-identifier <GATEWAY_ID> \
+  --region us-west-2
+```
+
+### Update Gateway Target
+```bash
+aws bedrock-agentcore-control update-gateway-target \
+  --gateway-identifier <GATEWAY_ID> \
+  --target-identifier <TARGET_ID> \
   --region us-west-2
 ```
 
@@ -93,8 +151,18 @@ aws bedrock-agentcore-control delete-gateway-target \
   --region us-west-2
 ```
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Deployment Strategies](deployment-strategies.md) | Credential provider patterns, multi-environment setup, key rotation |
+| [Troubleshooting Guide](troubleshooting-guide.md) | Common errors, diagnosis steps, solutions |
+| [Deploy Template Script](deploy-template.sh) | Automated deployment script |
+| [Validate Deployment Script](validate-deployment.sh) | Post-deployment verification |
+
 ## Related Resources
 
 - [Cross-Service Credential Management](../../cross-service/credential-management.md)
+- [Policy Service](../policy/README.md) — enforce tool access controls at the gateway boundary
 - [AWS Gateway Documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway.html)
 - [Bedrock AgentCore CLI Reference](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/bedrock-agentcore-control/index.html)

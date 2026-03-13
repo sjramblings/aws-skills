@@ -116,7 +116,7 @@ if cdk deploy --profile "${AWS_PROFILE:-default}" --require-approval never; then
     echo ""
     print_info "Deployment Details:"
     echo "  Gateway ID: $GATEWAY_IDENTIFIER"
-    echo "  Stack Name: ${GATEWAY_NAME}FootballAPITarget"
+    echo "  Stack Name: ${STACK_NAME:-${GATEWAY_NAME}GatewayTarget}"
     echo "  Region: $AWS_REGION"
     echo "  Credential Provider: $CREDENTIAL_PROVIDER_NAME"
     echo ""

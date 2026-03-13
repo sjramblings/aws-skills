@@ -257,26 +257,21 @@ aws bedrock-agentcore-control update-api-key-credential-provider \
 
 ### CloudWatch Alarms
 
-```typescript
-// CDK Example: Create alarm for high error rate
-new cloudwatch.Alarm(this, 'HighErrorRate', {
-  metric: new cloudwatch.Metric({
-    namespace: 'AWS/BedrockAgentCore',
-    metricName: 'TargetErrorRate',
-    dimensionsMap: {
-      GatewayId: gatewayId,
-      TargetId: targetId,
-    },
-    statistic: 'avg',
-    period: Duration.minutes(5),
-  }),
-  threshold: 10,
-  evaluationPeriods: 2,
-  datapointsToAlarm: 2,
-  comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
-  alarmDescription: 'Error rate exceeds 10%',
-  actionsEnabled: true,
-});
+```bash
+# Create alarm for high error rate
+aws cloudwatch put-metric-alarm \
+  --alarm-name high-error-rate-gateway \
+  --alarm-description "Error rate exceeds 10%" \
+  --metric-name TargetErrorRate \
+  --namespace AWS/BedrockAgentCore \
+  --statistic Average \
+  --period 300 \
+  --evaluation-periods 2 \
+  --datapoints-to-alarm 2 \
+  --threshold 10 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=GatewayId,Value=<GATEWAY_ID> Name=TargetId,Value=<TARGET_ID> \
+  --alarm-actions <SNS_TOPIC_ARN>
 ```
 
 ## Cost Optimization

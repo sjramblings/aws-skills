@@ -132,6 +132,74 @@ aws bedrock-agentcore-control delete-api-key-credential-provider \
   --region us-west-2
 ```
 
+## OAuth2 Credential Provider Management
+
+```bash
+# List OAuth2 credential providers
+aws bedrock-agentcore-control list-oauth2-credential-providers \
+  --region us-west-2
+
+# Get OAuth2 credential provider details
+aws bedrock-agentcore-control get-oauth2-credential-provider \
+  --name MyOAuthProvider \
+  --region us-west-2
+
+# Update OAuth2 credential provider
+aws bedrock-agentcore-control update-oauth2-credential-provider \
+  --name MyOAuthProvider \
+  --region us-west-2
+
+# Delete OAuth2 credential provider
+aws bedrock-agentcore-control delete-oauth2-credential-provider \
+  --name MyOAuthProvider \
+  --region us-west-2
+```
+
+## Workload Identity Management
+
+Workload identities represent agent identities with specialized attributes for authentication and authorization.
+
+```bash
+# Create a workload identity
+aws bedrock-agentcore-control create-workload-identity \
+  --name my-agent-identity \
+  --region us-west-2
+
+# Get workload identity
+aws bedrock-agentcore-control get-workload-identity \
+  --name my-agent-identity \
+  --region us-west-2
+
+# List workload identities
+aws bedrock-agentcore-control list-workload-identities \
+  --region us-west-2
+
+# Update workload identity
+aws bedrock-agentcore-control update-workload-identity \
+  --name my-agent-identity \
+  --region us-west-2
+
+# Delete workload identity
+aws bedrock-agentcore-control delete-workload-identity \
+  --name my-agent-identity \
+  --region us-west-2
+```
+
+## Token Vault
+
+The Token Vault securely stores OAuth 2.0 tokens, client credentials, and API keys with encryption and strict access controls.
+
+```bash
+# Get token vault configuration
+aws bedrock-agentcore-control get-token-vault \
+  --region us-west-2
+
+# Set a custom KMS key for token vault encryption
+aws bedrock-agentcore-control set-token-vault-cmk \
+  --kms-key-arn arn:aws:kms:us-west-2:<ACCOUNT_ID>:key/<KEY_ID> \
+  --region us-west-2
+```
+
 ## Built-in OAuth Providers
 
 AgentCore Identity includes built-in providers for popular services:

@@ -1,228 +1,39 @@
-# AgentCore Observability Service
+# AgentCore Observability
 
-> **Status**: ✅ Available
+> **Status**: GA
 
 ## Overview
 
-Amazon Bedrock AgentCore Observability helps developers trace, debug, and monitor agent performance in production through unified operational dashboards and OpenTelemetry-compatible telemetry.
+Amazon Bedrock AgentCore provides built-in observability through OpenTelemetry integration. Agent code instruments with OpenTelemetry; telemetry data flows automatically to CloudWatch Logs, CloudWatch Metrics, and AWS X-Ray. There are no dedicated AgentCore CLI commands to enable or configure observability — it is built into the platform.
 
-## Core Capabilities
+## How It Works
 
-### Distributed Tracing
-- **End-to-End Tracing**: Complete request tracing across all AgentCore services
-- **Workflow Visualization**: Detailed step-by-step workflow execution views
-- **Service Dependencies**: Automatic mapping of service interactions
-- **Bottleneck Detection**: Identify performance bottlenecks in agent workflows
-- **Error Attribution**: Pinpoint exact failure points in complex workflows
+1. AgentCore services automatically emit traces, logs, and metrics via OpenTelemetry
+2. Data is collected and routed to CloudWatch and X-Ray
+3. You query and visualize using standard AWS observability tools (`aws cloudwatch`, `aws logs`, `aws xray`)
 
-### Metrics and Monitoring
-- **Real-Time Metrics**: Live operational metrics for all agent activities
-- **Token Tracking**: Monitor token consumption and costs
-- **Latency Measurements**: Track P50, P95, P99 response times
-- **Session Monitoring**: Track session duration and status
-- **Error Rates**: Monitor error rates by service and operation
-- **Throughput**: Measure requests per second and operation counts
+## Metrics by Service
 
-### Logging
-- **Centralized Aggregation**: All service logs in one place
-- **Structured Logging**: Consistent log format with correlation IDs
-- **Search and Filter**: Query logs by service, operation, or time
-- **Real-Time Streaming**: Live log tailing for debugging
-- **Log Retention**: Configurable retention policies
-
-### Dashboards and Alerting
-- **Unified Dashboards**: Pre-built operational dashboards
-- **Custom Metrics**: Define and visualize custom metrics
-- **CloudWatch Integration**: Native AWS CloudWatch support
-- **Configurable Alerts**: Set up alerts for critical conditions
-- **Multi-Service Views**: Consolidated view across all services
-
-### OpenTelemetry Support
-- **Industry Standard**: Compatible with OpenTelemetry specification
-- **Tool Integration**: Works with existing observability tools
-- **Custom Instrumentation**: Add custom traces and metrics
-- **External Export**: Export telemetry to external systems
-
-## Use Cases
-
-### Production Debugging
-Enable teams to:
-- Debug agent execution issues in real-time
-- Identify root causes of failures quickly
-- Trace request flows across services
-- Analyze error patterns and trends
-
-### Performance Monitoring
-Support scenarios like:
-- Monitor agent response times
-- Track token usage and costs
-- Identify slow operations
-- Optimize agent workflows
-
-### Behavior Analysis
-Allow teams to:
-- Analyze agent behavior patterns
-- Understand user interaction flows
-- Identify usage trends
-- Detect anomalies
-
-### Quality Assurance
-Enable teams to:
-- Ensure SLA compliance
-- Monitor service reliability
-- Track quality metrics
-- Validate performance standards
-
-### Capacity Planning
-Support activities like:
-- Forecast resource needs
-- Identify scaling requirements
-- Optimize resource allocation
-- Plan for growth
-
-## Architecture
-
-### Observability Data Flow
-
-```
-┌─────────────────────────────────────────┐
-│  AgentCore Services                     │
-│  - Gateway, Runtime, Memory, etc.       │
-│  - Emit traces, logs, metrics           │
-└─────────────────────────────────────────┘
-           ↓
-┌─────────────────────────────────────────┐
-│  OpenTelemetry Collector                │
-│  - Receive telemetry data               │
-│  - Process and enrich                   │
-│  - Route to destinations                │
-└─────────────────────────────────────────┘
-           ↓
-    ┌──────┴──────┐
-    ↓             ↓
-┌─────────┐  ┌─────────────┐
-│CloudWatch│  │  X-Ray      │
-│ Logs    │  │  Traces     │
-│ Metrics │  │  Service Map│
-└─────────┘  └─────────────┘
-    ↓             ↓
-┌─────────────────────────────────────────┐
-│  Unified Dashboards                     │
-│  - Service health                       │
-│  - Performance metrics                  │
-│  - Error analysis                       │
-│  - Cost tracking                        │
-└─────────────────────────────────────────┘
-```
-
-### Data Collection Model
-
-1. **Automatic Instrumentation**: Built-in instrumentation for all services
-2. **Context Propagation**: Correlation IDs passed across service boundaries
-3. **Sampling**: Intelligent sampling for high-volume operations
-4. **Buffering**: Local buffering for reliability
-5. **Batch Export**: Efficient batch transmission to backends
-
-## Configuration
-
-### Enable Observability
-
-```bash
-# Enable observability for agent
-aws bedrock-agentcore-control update-observability-config \
-  --agent-id <AGENT_ID> \
-  --config '{
-    "tracing": {
-      "enabled": true,
-      "samplingRate": 1.0
-    },
-    "metrics": {
-      "enabled": true,
-      "interval": 60
-    },
-    "logging": {
-      "enabled": true,
-      "level": "INFO"
-    }
-  }' \
-  --region <REGION>
-```
-
-### Configure Sampling
-
-```bash
-# Set trace sampling rate
-aws bedrock-agentcore-control update-tracing-config \
-  --agent-id <AGENT_ID> \
-  --sampling-rate 0.1 \
-  --region <REGION>
-```
-
-### Custom Metrics
-
-```bash
-# Define custom metric
-aws bedrock-agentcore-control create-custom-metric \
-  --agent-id <AGENT_ID> \
-  --metric-name "CustomOperationCount" \
-  --metric-type "Counter" \
-  --description "Count of custom operations" \
-  --region <REGION>
-```
-
-## Traces
-
-### View Traces
-
-```bash
-# Query recent traces
-aws xray get-trace-summaries \
-  --start-time <START_TIMESTAMP> \
-  --end-time <END_TIMESTAMP> \
-  --filter-expression 'service(id(name: "AgentCore", type: "AWS::Service"))'
-```
-
-### Trace Details
-
-```bash
-# Get specific trace
-aws xray batch-get-traces \
-  --trace-ids <TRACE_ID_1> <TRACE_ID_2>
-```
-
-### Service Map
-
-```bash
-# Get service map
-aws xray get-service-graph \
-  --start-time <START_TIMESTAMP> \
-  --end-time <END_TIMESTAMP>
-```
-
-## Metrics
-
-### Common Metrics
-
-**Gateway Metrics**:
-- `TargetInvocations`: Number of target invocations
-- `TargetErrors`: Number of target errors
-- `TargetLatency`: Target response latency
+**Gateway Metrics** (namespace: `AWS/BedrockAgentCore`):
+- `TargetInvocations` — number of target invocations
+- `TargetErrors` — number of target errors
+- `TargetLatency` — target response latency
 
 **Runtime Metrics**:
-- `AgentExecutions`: Number of agent executions
-- `ExecutionDuration`: Agent execution duration
-- `ExecutionErrors`: Number of execution failures
+- `AgentExecutions` — number of agent executions
+- `ExecutionDuration` — agent execution duration
+- `ExecutionErrors` — number of execution failures
 
 **Memory Metrics**:
-- `MemoryReads`: Number of memory read operations
-- `MemoryWrites`: Number of memory write operations
-- `MemorySize`: Total memory storage size
+- `MemoryReads` — number of memory read operations
+- `MemoryWrites` — number of memory write operations
+- `MemorySize` — total memory storage size
 
 **Token Metrics**:
-- `TokensConsumed`: Total tokens used
-- `TokenCost`: Estimated cost in dollars
+- `TokensConsumed` — total tokens used
+- `TokenCost` — estimated cost
 
-### Query Metrics
+## Querying Metrics
 
 ```bash
 # Get metric statistics
@@ -234,11 +45,7 @@ aws cloudwatch get-metric-statistics \
   --end-time <END> \
   --period 300 \
   --statistics Sum Average
-```
 
-### Custom Metrics
-
-```bash
 # Put custom metric data
 aws cloudwatch put-metric-data \
   --namespace AgentCore/Custom \
@@ -248,8 +55,6 @@ aws cloudwatch put-metric-data \
 ```
 
 ## Logs
-
-### Query Logs
 
 ```bash
 # Tail agent logs
@@ -262,12 +67,8 @@ aws logs filter-log-events \
   --log-group-name /aws/bedrock-agentcore/<AGENT_ID> \
   --filter-pattern "ERROR" \
   --start-time <TIMESTAMP>
-```
 
-### Log Insights
-
-```bash
-# Run Insights query
+# Run CloudWatch Logs Insights query
 aws logs start-query \
   --log-group-name /aws/bedrock-agentcore/<AGENT_ID> \
   --start-time <START_TIMESTAMP> \
@@ -278,9 +79,26 @@ aws logs start-query \
     | limit 20'
 ```
 
-## Dashboards
+## Traces
 
-### Create Dashboard
+```bash
+# Query recent traces
+aws xray get-trace-summaries \
+  --start-time <START_TIMESTAMP> \
+  --end-time <END_TIMESTAMP> \
+  --filter-expression 'service(id(name: "AgentCore", type: "AWS::Service"))'
+
+# Get specific trace details
+aws xray batch-get-traces \
+  --trace-ids <TRACE_ID_1> <TRACE_ID_2>
+
+# Get service dependency map
+aws xray get-service-graph \
+  --start-time <START_TIMESTAMP> \
+  --end-time <END_TIMESTAMP>
+```
+
+## Dashboards
 
 ```bash
 # Create CloudWatch dashboard
@@ -322,12 +140,10 @@ aws cloudwatch put-dashboard \
 }
 ```
 
-## Alerting
-
-### Create Alarm
+## Alarms
 
 ```bash
-# Create CloudWatch alarm
+# High error rate alarm
 aws cloudwatch put-metric-alarm \
   --alarm-name high-error-rate-<AGENT_ID> \
   --alarm-description "Alert when error rate exceeds threshold" \
@@ -340,178 +156,62 @@ aws cloudwatch put-metric-alarm \
   --comparison-operator GreaterThanThreshold \
   --dimensions Name=AgentId,Value=<AGENT_ID> \
   --alarm-actions <SNS_TOPIC_ARN>
-```
 
-### Alarm Templates
-
-**High Error Rate**:
-```bash
-# Alert on >5% error rate
-aws cloudwatch put-metric-alarm \
-  --alarm-name error-rate-high \
-  --metric-name ErrorRate \
-  --threshold 5 \
-  --comparison-operator GreaterThanThreshold
-```
-
-**High Latency**:
-```bash
-# Alert on P95 latency >2s
+# High latency alarm (P95 > 2s)
 aws cloudwatch put-metric-alarm \
   --alarm-name latency-high \
   --metric-name TargetLatency \
+  --namespace AWS/BedrockAgentCore \
   --statistic p95 \
+  --period 300 \
+  --evaluation-periods 2 \
   --threshold 2000 \
-  --comparison-operator GreaterThanThreshold
-```
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=AgentId,Value=<AGENT_ID> \
+  --alarm-actions <SNS_TOPIC_ARN>
 
-**High Token Usage**:
-```bash
-# Alert on excessive token usage
+# High token usage alarm
 aws cloudwatch put-metric-alarm \
   --alarm-name tokens-high \
   --metric-name TokensConsumed \
+  --namespace AWS/BedrockAgentCore \
   --statistic Sum \
+  --period 3600 \
+  --evaluation-periods 1 \
   --threshold 1000000 \
-  --comparison-operator GreaterThanThreshold
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=AgentId,Value=<AGENT_ID> \
+  --alarm-actions <SNS_TOPIC_ARN>
 ```
 
 ## Best Practices
 
-### Instrumentation
-- Enable observability for all production agents
-- Use appropriate sampling rates (1.0 for dev, 0.1 for prod)
-- Add custom metrics for business-critical operations
-- Include context in log messages
-- Use structured logging formats
-
-### Performance
-- Use appropriate metric aggregation periods
-- Implement metric sampling for high-volume operations
-- Set reasonable log retention periods
-- Use log filtering to reduce noise
-- Archive old traces and logs
-
-### Cost Optimization
-- Adjust sampling rates based on traffic
-- Use metric filters to create custom metrics
-- Set appropriate log retention (7-30 days)
-- Archive infrequently accessed data to S3
-- Use CloudWatch Insights for complex queries
-
-### Alerting
-- Define clear SLOs and SLIs
-- Set meaningful alert thresholds
-- Avoid alert fatigue with proper tuning
+- Use appropriate sampling rates (1.0 for dev, 0.1 for prod) in your OpenTelemetry instrumentation
+- Set CloudWatch log retention to 7-30 days to manage costs
+- Use CloudWatch Logs Insights for complex queries instead of scanning raw logs
+- Define SLOs and set meaningful alert thresholds — avoid alert fatigue
 - Use composite alarms for complex conditions
-- Implement escalation policies
 
-### Security
-- Encrypt logs and metrics at rest
-- Use IAM for access control
-- Implement least privilege access
-- Audit observability data access
-- Protect sensitive data in logs
+## Key Performance Indicators
 
-## Integration Patterns
-
-### With All Services
-
-Observability is automatically integrated with all AgentCore services:
-
-```
-Gateway ──→ Observability
-Runtime ──→ Observability
-Memory ──→ Observability
-Identity ──→ Observability
-Code Interpreter ──→ Observability
-Browser ──→ Observability
-```
-
-### With External Tools
-
-Export telemetry to external observability platforms:
-
-```
-AgentCore Observability
-    ↓
-OpenTelemetry Collector
-    ↓
-┌────────┬────────┬────────┐
-│Datadog │New Relic│Grafana│
-└────────┴────────┴────────┘
-```
+| Category | Metrics |
+|----------|---------|
+| **Availability** | Service uptime, error rate by service, failed request percentage |
+| **Performance** | P50/P95/P99 latency, request throughput, operation duration |
+| **Efficiency** | Token consumption rate, cost per operation, resource utilization |
 
 ## Troubleshooting
 
-### No Traces Appearing
+| Issue | Diagnosis | Solution |
+|-------|-----------|----------|
+| No traces appearing | Check if agent is instrumented with OpenTelemetry | Add OTel instrumentation to agent code |
+| Missing logs | `aws logs describe-log-groups --log-group-name-prefix /aws/bedrock-agentcore` | Verify IAM permissions for CloudWatch Logs |
+| High cardinality metrics | Too many unique dimension combinations | Reduce dimension cardinality, use metric filters |
+| High CloudWatch costs | Excessive logging or metrics | Adjust sampling rates, reduce log retention |
 
-**Diagnosis**:
-```bash
-# Check if tracing is enabled
-aws bedrock-agentcore-control get-observability-config \
-  --agent-id <AGENT_ID>
-```
+## Related Services
 
-**Solution**: Enable tracing in observability configuration
-
-### High Cardinality Metrics
-
-**Symptom**: Too many unique metric combinations
-**Solution**: Reduce dimension cardinality, use metric filters
-
-### Missing Logs
-
-**Diagnosis**:
-```bash
-# Check log group exists
-aws logs describe-log-groups \
-  --log-group-name-prefix /aws/bedrock-agentcore
-```
-
-**Solution**: Verify IAM permissions for CloudWatch Logs
-
-### High Costs
-
-**Symptom**: Excessive CloudWatch costs
-**Solution**: Adjust sampling rates, reduce log retention, archive old data
-
-## Performance Monitoring
-
-### Key Performance Indicators
-
-**Availability**:
-- Service uptime percentage
-- Error rate by service
-- Failed request percentage
-
-**Performance**:
-- P50, P95, P99 latency
-- Request throughput
-- Operation duration
-
-**Efficiency**:
-- Token consumption rate
-- Cost per operation
-- Resource utilization
-
-**Quality**:
-- Agent success rate
-- User satisfaction metrics
-- Workflow completion rate
-
-## Additional Resources
-
-- **AWS Documentation**: [Bedrock AgentCore Observability](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability.html)
-- **CloudWatch Guide**: [CloudWatch User Guide](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/)
-- **X-Ray Guide**: [AWS X-Ray Developer Guide](https://docs.aws.amazon.com/xray/latest/devguide/)
-- **OpenTelemetry**: [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
-- **Best Practices**: [Observability Best Practices](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-best-practices.html)
-
----
-
-**Related Services**:
-- [Gateway Service](../gateway/README.md) - Gateway monitoring
-- [Runtime Service](../runtime/README.md) - Runtime tracing
-- [Memory Service](../memory/README.md) - Memory metrics
-- [Credential Management](../../cross-service/credential-management.md) - Cross-service credential patterns
+- [Gateway Service](../gateway/README.md) — gateway metrics
+- [Runtime Service](../runtime/README.md) — runtime tracing
+- [Memory Service](../memory/README.md) — memory metrics
+- [AWS Observability Documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability.html)

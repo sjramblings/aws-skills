@@ -169,7 +169,7 @@ print_section "Test 5: CloudFormation Stack"
 
 # Extract stack name from gateway ID (prefix before first hyphen)
 STACK_PREFIX="$(echo "$GATEWAY_ID" | cut -d'-' -f1)"
-STACK_NAME="${STACK_PREFIX}FootballAPITarget"
+STACK_NAME="${STACK_NAME:-${STACK_PREFIX}GatewayTarget}"
 
 print_info "Checking CloudFormation stack: $STACK_NAME"
 
