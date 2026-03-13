@@ -113,6 +113,10 @@ For patterns and best practices that span multiple AgentCore services:
 
 - **Credential Management**: [`cross-service/credential-management.md`](cross-service/credential-management.md) - Unified credential patterns, security practices, rotation procedures
 
+## Related Skills
+
+- **CDK Infrastructure**: For defining AgentCore resources as CDK constructs (infrastructure-as-code), use the `aws-cdk-development` skill. It covers `aws_cdk.aws_bedrock_agentcore_alpha` L2 constructs for Runtime, Gateway, GatewayTarget, Browser, CodeInterpreter, and Memory.
+
 ## Additional Resources
 
 - **AWS Documentation**: [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html)

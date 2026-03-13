@@ -1,6 +1,14 @@
 ---
 name: aws-cdk-development
-description: AWS Cloud Development Kit (CDK) expert for building cloud infrastructure with TypeScript/Python. Use when creating CDK stacks, defining CDK constructs, implementing infrastructure as code, or when the user mentions CDK, CloudFormation, IaC, cdk synth, cdk deploy, or wants to define AWS infrastructure programmatically. Covers CDK app structure, construct patterns, stack composition, and deployment workflows.
+description: >-
+  AWS Cloud Development Kit (CDK) expert for building cloud infrastructure with
+  TypeScript/Python. Use when creating CDK stacks, defining CDK constructs,
+  implementing infrastructure as code, or when the user mentions CDK, CloudFormation,
+  IaC, cdk synth, cdk deploy, or wants to define AWS infrastructure programmatically.
+  Also covers Bedrock AgentCore CDK constructs (Runtime, Gateway, GatewayTarget,
+  Browser, CodeInterpreter, Memory), agent runtime CDK, MCP gateway CDK, and
+  aws_cdk.aws_bedrock_agentcore_alpha. Covers CDK app structure, construct patterns,
+  stack composition, and deployment workflows.
 context: fork
 skills:
   - aws-mcp-setup
@@ -184,6 +192,56 @@ The validation script now focuses on:
 - Synthesis success verification
 - (Note: Detailed anti-pattern checks are handled by cdk-nag)
 
+## AgentCore CDK Constructs
+
+The `aws_cdk.aws_bedrock_agentcore_alpha` module provides L2 constructs for Amazon Bedrock AgentCore services.
+
+> **Note**: This module is experimental (alpha). APIs may change without backward compatibility.
+
+**Import**:
+```python
+import aws_cdk.aws_bedrock_agentcore_alpha as agentcore
+```
+
+**Available Constructs**:
+
+| Construct | Description |
+|-----------|-------------|
+| `Runtime` | Deploy containerized or direct-code agents |
+| `Gateway` | MCP integration point between agents and external services |
+| `GatewayTarget` | Define tools a Gateway hosts (Lambda, OpenAPI, Smithy, MCP, API GW) |
+| `BrowserCustom` | Cloud browser for agent web interaction |
+| `CodeInterpreterCustom` | Secure code execution sandboxes |
+| `Memory` | Agent conversation memory with extraction strategies |
+
+**Naming Rules**:
+- **Runtime names**: Letters, numbers, underscores only (`simple_runtime`)
+- **Gateway/target names**: Alphanumeric and hyphens only (`my-gateway`, `simple-tools`)
+- **JSII dicts**: Use camelCase keys (`bucketName`, not `bucket_name`)
+
+**Quick Patterns**:
+
+Runtime with Docker asset:
+```python
+artifact = agentcore.AgentRuntimeArtifact.from_asset(str(agent_dir), file="Dockerfile")
+runtime = agentcore.Runtime(self, "MyRuntime",
+    runtime_name="my_runtime",
+    agent_runtime_artifact=artifact,
+)
+```
+
+Gateway + Lambda target:
+```python
+gateway = agentcore.Gateway(self, "MyGateway", gateway_name="my-gateway")
+gateway.add_lambda_target("MyTarget",
+    gateway_target_name="my-target",
+    lambda_function=fn,
+    tool_schema=agentcore.ToolSchema.from_inline([...]),
+)
+```
+
+**Full API reference**: `references/agentcore-constructs.md`
+
 ## Workflow Guidelines
 
 ### Development Workflow
@@ -269,10 +327,15 @@ This reference includes:
 - Cost optimization strategies
 - Performance considerations
 
+## Related Skills
+
+- **aws-agentic-ai**: Use for AgentCore CLI operations (create/update/delete/invoke runtimes, gateways, targets via `aws bedrock-agentcore-control`). This CDK skill handles the infrastructure-as-code side; aws-agentic-ai handles the imperative CLI side.
+
 ## Additional Resources
 
 - **Validation Script**: `scripts/validate-stack.sh` - Pre-deployment validation
 - **CDK Patterns**: `references/cdk-patterns.md` - Detailed pattern library
+- **AgentCore Constructs**: `references/agentcore-constructs.md` - Full L2 construct API reference
 - **AWS Documentation MCP**: Integrated for latest AWS information
 - **CDK MCP Server**: Integrated for CDK-specific guidance
 

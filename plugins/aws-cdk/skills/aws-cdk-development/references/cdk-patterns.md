@@ -10,6 +10,7 @@ This reference provides detailed patterns, anti-patterns, and best practices for
 - [Lambda Integration](#lambda-integration)
 - [Testing Patterns](#testing-patterns)
 - [Cost Optimization](#cost-optimization)
+- [AgentCore Patterns](#agentcore-patterns)
 - [Anti-Patterns](#anti-patterns)
 
 ## Naming Conventions
@@ -328,6 +329,118 @@ const bucket = new s3.Bucket(this, 'DataBucket', {
     },
   ],
 });
+```
+
+## AgentCore Patterns
+
+Patterns for `aws_cdk.aws_bedrock_agentcore_alpha` L2 constructs. See `references/agentcore-constructs.md` for full API reference.
+
+### Runtime with Docker Asset
+
+Deploy a containerized agent from a local Dockerfile:
+
+```python
+import aws_cdk.aws_bedrock_agentcore_alpha as agentcore
+
+artifact = agentcore.AgentRuntimeArtifact.from_asset(
+    str(agent_dir),
+    file="Dockerfile",
+)
+
+runtime = agentcore.Runtime(self, "MyRuntime",
+    runtime_name="my_runtime",
+    agent_runtime_artifact=artifact,
+    description="Strands SDK container runtime.",
+)
+
+# Grant Bedrock model access
+runtime.add_to_role_policy(iam.PolicyStatement(
+    actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+    resources=[
+        "arn:aws:bedrock:*:*:inference-profile/*",
+        "arn:aws:bedrock:*:*:foundation-model/*",
+    ],
+))
+
+# Or use typed model grants (preferred)
+import aws_cdk.aws_bedrock_alpha as bedrock
+model = bedrock.BedrockFoundationModel.ANTHROPIC_CLAUDE_SONNET_4_V1_0
+model.grant_invoke(runtime)
+```
+
+### Runtime with S3 Direct Code
+
+Deploy agent code as a zip to S3 (no Docker required):
+
+```python
+# S3 bucket + deployment
+code_bucket = s3.Bucket(self, "AgentCodeBucket",
+    removal_policy=RemovalPolicy.DESTROY, auto_delete_objects=True,
+)
+deployment = s3_deploy.BucketDeployment(self, "DeployAgentCode",
+    sources=[s3_deploy.Source.asset(str(agent_code_path))],
+    destination_bucket=code_bucket,
+    extract=False,  # keep as zip
+)
+deployed_key = cdk.Fn.select(0, deployment.object_keys)
+
+# JSII expects camelCase: bucketName, objectKey
+artifact = agentcore.AgentRuntimeArtifact.from_s3(
+    s3_location={"bucketName": code_bucket.bucket_name, "objectKey": deployed_key},
+    runtime=agentcore.AgentCoreRuntime.PYTHON_3_12,
+    entrypoint=["main.py"],
+)
+
+runtime = agentcore.Runtime(self, "SimpleRuntime",
+    runtime_name="simple_runtime",
+    agent_runtime_artifact=artifact,
+)
+# Ensure runtime waits for S3 upload
+runtime.node.add_dependency(deployment)
+```
+
+### Gateway + Lambda Target
+
+Deploy an MCP gateway with a Lambda function as a tool target:
+
+```python
+# Gateway (Cognito M2M auth by default)
+gateway = agentcore.Gateway(self, "Gateway",
+    gateway_name="my-gateway",
+    description="MCP gateway with Cognito M2M.",
+)
+
+# Lambda tool handler
+tool_fn = lambda_.Function(self, "ToolFn",
+    runtime=lambda_.Runtime.PYTHON_3_12,
+    handler="index.handler",
+    code=lambda_.Code.from_inline('...'),
+    timeout=cdk.Duration.seconds(30),
+)
+
+# Tool schema (JSII: use inputSchema, not input_schema)
+tool_schema = agentcore.ToolSchema.from_inline([{
+    "name": "get_time",
+    "description": "Returns the current UTC time.",
+    "inputSchema": agentcore.SchemaDefinition(
+        type=agentcore.SchemaDefinitionType.OBJECT,
+        properties={},
+        required=[],
+    ),
+}])
+
+# Add Lambda target (auto-grants lambda:InvokeFunction to gateway role)
+gateway.add_lambda_target("ToolTarget",
+    gateway_target_name="simple-tools",
+    description="Simple tools for demo.",
+    lambda_function=tool_fn,
+    tool_schema=tool_schema,
+)
+
+# Access Cognito properties for runtime env
+gateway_url = gateway.gateway_url
+token_endpoint = gateway.token_endpoint_url
+client_id = gateway.user_pool_client.user_pool_client_id if gateway.user_pool_client else ""
 ```
 
 ## Anti-Patterns

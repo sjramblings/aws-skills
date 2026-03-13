@@ -25,7 +25,16 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# Find project root by looking for cdk.json
+PROJECT_ROOT="$SCRIPT_DIR"
+while [ "$PROJECT_ROOT" != "/" ] && [ ! -f "$PROJECT_ROOT/cdk.json" ]; do
+    PROJECT_ROOT="$(dirname "$PROJECT_ROOT")"
+done
+if [ ! -f "$PROJECT_ROOT/cdk.json" ]; then
+    echo "Error: Could not find cdk.json in parent directories"
+    exit 1
+fi
 
 echo "🔍 AWS CDK Stack Validation"
 echo "============================"
