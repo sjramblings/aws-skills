@@ -147,6 +147,27 @@
       "skills": [
         "./skills/aws-agentic-ai"
       ]
+    },
+    {
+      "name": "dev-tools",
+      "description": "Developer workflow tools including justfile task runner, conventional commits, and commit message validation",
+      "version": "1.0.0",
+      "author": {
+        "name": "Kane Zhu",
+        "email": "me@kane.mx"
+      },
+      "homepage": "https://github.com/zxkane/aws-skills",
+      "repository": "https://github.com/zxkane/aws-skills",
+      "license": "MIT",
+      "keywords": ["just", "justfile", "commit", "conventional-commits", "task-runner", "developer-tools"],
+      "category": "development",
+      "source": "./plugins/dev-tools",
+      "strict": false,
+      "skills": [
+        "./skills/just",
+        "./skills/commit",
+        "./skills/validate-commit"
+      ]
     }
   ]
 }
