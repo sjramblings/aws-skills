@@ -1,6 +1,6 @@
 {
-  "harness_version": "0.4.0",
-  "milestone": "M3",
+  "harness_version": "0.5.0",
+  "milestone": "M4",
   "bootstrap": {
     "project_name": "{{PROJECT_NAME}}",
     "uat_region": "{{UAT_REGION}}",
@@ -31,9 +31,25 @@
     ".github/workflows/capability-probe.yml",
     ".github/workflows/pr-stack.yml",
     ".github/workflows/pr-stack-teardown.yml",
+    ".github/workflows/threat-model-check.yml",
+    ".github/workflows/lint.yml",
     ".harness/probe-matrix.json",
-    "tools/lints/.gitkeep",
-    "tools/scripts/.gitkeep",
+    "docs/references/confused-deputy-llms.txt",
+    "docs/references/parse-at-boundary-llms.txt",
+    "docs/references/red-test-policy.md",
+    "tools/lints/lint-types.ts",
+    "tools/lints/run-lints.ts",
+    "tools/lints/cdk-confused-deputy.ts",
+    "tools/lints/cdk-encryption-required.ts",
+    "tools/lints/cdk-ssl-only.ts",
+    "tools/lints/cdk-sqs-visibility-timeout.ts",
+    "tools/lints/cdk-fifo-maxconcurrency.ts",
+    "tools/lints/cdk-resource-tags.ts",
+    "tools/lints/zod-parse-at-boundary.ts",
+    "tools/lints/bedrock-cost-instrumentation.ts",
+    "tools/lints/doc-freshness.py",
+    "tools/lints/agents-md-map-only.py",
+    "tools/lints/golden-principle-has-lint.py",
     "tools/scripts/pr-stack-budget.sh"
   ]
 }

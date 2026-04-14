@@ -1,0 +1,94 @@
+---
+owner: "@{{OWNER}}"
+updated: 2026-04-15
+status: active
+---
+
+# Parse at the Boundary — Remediation reference (llms.txt)
+
+Referenced by `tools/lints/zod-parse-at-boundary.ts`. Reloaded into agent
+context when that lint surfaces so the fix can be applied in one turn.
+
+## The rule
+
+**Every handler that reads `event.body`, query params, path params, or
+any external payload MUST parse it with a schema at the boundary.**
+No trust-by-default shapes. Golden principle P-07. Lopopolo: *"parse
+data shapes at the boundary."*
+
+Source: viking-context-service issue #3 — session URIs generated with
+uppercase ULIDs failed `validateUri()` regex. Shipped because the
+handler was trusting a string shape without parsing it.
+
+## TypeScript — Zod pattern
+
+```ts
+import { z } from "zod";
+
+const IngestRequest = z.object({
+  uri: z.string().regex(/^[a-z0-9][a-z0-9.-]*$/),
+  content: z.string().min(1).max(100_000),
+  metadata: z.record(z.string()).optional(),
+});
+type IngestRequest = z.infer<typeof IngestRequest>;
+
+export async function handler(event: APIGatewayProxyEvent) {
+  const parsed = IngestRequest.safeParse(
+    event.body ? JSON.parse(event.body) : {},
+  );
+  if (!parsed.success) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "invalid request", issues: parsed.error.issues }),
+    };
+  }
+  // parsed.data is typed — safe to use
+  return doIngest(parsed.data);
+}
+```
+
+## Python — Pydantic pattern
+
+```python
+from pydantic import BaseModel, constr
+
+class IngestRequest(BaseModel):
+    uri: constr(pattern=r"^[a-z0-9][a-z0-9.-]*$")
+    content: constr(min_length=1, max_length=100_000)
+    metadata: dict[str, str] | None = None
+
+def handler(event, _context):
+    try:
+        body = IngestRequest.model_validate_json(event["body"])
+    except ValidationError as e:
+        return {"statusCode": 400, "body": e.json()}
+    return do_ingest(body)
+```
+
+## What counts as "parsing at the boundary"
+
+- `Zod.parse` / `Zod.safeParse`
+- `z.object(...)` with a `.parse()` call
+- Pydantic `model_validate` / `model_validate_json`
+- `io-ts` / `arktype` / `effect.Schema`
+- Any validated, typed shape before the data flows into business logic
+
+## What does NOT count
+
+- `JSON.parse(event.body)` alone — no schema enforcement
+- Manual `if (body.foo !== undefined)` guards — not exhaustive
+- `as` / cast assertions — they lie
+
+## Why this lives in the harness
+
+Shape bugs are the single cheapest bug class to prevent at compile time
+and the single most expensive to debug in production. The lint catches
+them at PR time so they never ship. Per Lopopolo: enforce invariants,
+not implementations.
+
+## References
+
+- viking-context-service issue #3 (ULID uppercase)
+- Golden principle: `P-07`
+- Lint: `tools/lints/zod-parse-at-boundary.ts`
+- [Zod docs](https://zod.dev)

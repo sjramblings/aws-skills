@@ -1,0 +1,103 @@
+name: threat-model-check
+
+# Blocks PRs that add a new service directory without a signed STRIDE threat model.
+# A STRIDE doc is considered "signed" when the Sign-off checkbox is checked AND the
+# check was toggled by a user other than the PR author.
+#
+# Enforces harness golden principle P-13.
+
+on:
+  pull_request:
+    paths:
+      - 'cdk/lib/**'
+      - 'services/**'
+      - 'docs/threat-models/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Identify added service directories
+        id: services
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          # Directories that are new (A) in this PR under cdk/lib/ or services/
+          added=$(git diff --name-only --diff-filter=A "${base}..${head}" \
+            | grep -E '^(cdk/lib|services)/[^/]+/' \
+            | awk -F/ '{print $2"/"$3}' | sort -u || true)
+          echo "added<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$added" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Require STRIDE doc per new service
+        if: steps.services.outputs.added != ''
+        run: |
+          set -euo pipefail
+          missing=()
+          unsigned=()
+          while IFS= read -r svc; do
+            [[ -z "$svc" ]] && continue
+            name=$(basename "$svc")
+            doc="docs/threat-models/${name}-stride.md"
+            if [[ ! -f "$doc" ]]; then
+              missing+=("$name ($doc)")
+              continue
+            fi
+            # Must contain a checked sign-off box
+            if ! grep -q '^- \[x\] Reviewed by:' "$doc"; then
+              unsigned+=("$name ($doc)")
+            fi
+          done <<< "${{ steps.services.outputs.added }}"
+
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error ::New service(s) without STRIDE threat model:"
+            printf '  - %s\n' "${missing[@]}"
+            echo ""
+            echo "Run the threat-model-stride skill and commit the signed doc."
+            exit 1
+          fi
+          if [[ ${#unsigned[@]} -gt 0 ]]; then
+            echo "::error ::New service(s) with unsigned STRIDE threat model:"
+            printf '  - %s\n' "${unsigned[@]}"
+            echo ""
+            echo "A reviewer must check the Sign-off box in a separate commit."
+            exit 1
+          fi
+
+      - name: Verify sign-off author differs from PR author
+        if: steps.services.outputs.added != ''
+        run: |
+          set -euo pipefail
+          pr_author="${{ github.event.pull_request.user.login }}"
+          fail=0
+          while IFS= read -r svc; do
+            [[ -z "$svc" ]] && continue
+            name=$(basename "$svc")
+            doc="docs/threat-models/${name}-stride.md"
+            [[ ! -f "$doc" ]] && continue
+            # Find the commit that introduced the checked box
+            signoff_commit=$(git log -p -- "$doc" \
+              | awk '/^commit /{c=$2} /^\+- \[x\] Reviewed by:/{print c; exit}')
+            if [[ -z "$signoff_commit" ]]; then
+              continue
+            fi
+            signer=$(git show -s --format='%an' "$signoff_commit")
+            if [[ "$signer" == "$pr_author" ]]; then
+              echo "::error ::STRIDE sign-off for ${name} was made by the PR author (${pr_author}). A different reviewer must sign."
+              fail=1
+            fi
+          done <<< "${{ steps.services.outputs.added }}"
+          exit $fail

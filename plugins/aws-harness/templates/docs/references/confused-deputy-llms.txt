@@ -1,0 +1,111 @@
+---
+owner: "@{{OWNER}}"
+updated: 2026-04-15
+status: active
+---
+
+# Confused Deputy — Remediation reference (llms.txt)
+
+Referenced by `tools/lints/cdk-confused-deputy.ts`. Reloaded into agent
+context whenever a confused-deputy lint error is surfaced, so the agent
+can apply the fix without fetching external docs.
+
+## What it is
+
+A **confused deputy** vulnerability is when a privileged actor (usually
+an AWS service principal like `s3.amazonaws.com` or `bedrock.amazonaws.com`)
+is tricked into performing an action on behalf of an untrusted caller
+from a different AWS account.
+
+The classic example: you grant `s3.amazonaws.com` permission to PUT
+objects into your bucket. Without source conditions, **any** S3 event
+from **any** AWS account can invoke that grant — because S3 everywhere
+shares the same service principal.
+
+viking-context-service hit this twice:
+- commit `15e104c` — S3 bucket granted `bedrock-agentcore.amazonaws.com`
+  PUT access without `aws:SourceAccount` / `aws:SourceArn` — any
+  AgentCore tenant could write to the bucket
+- commit `b5a25bf` — SNS topic policy granted a service principal cross-
+  account publish rights without scoping
+
+## The rule
+
+**Any resource policy statement with `Principal.Service` must include
+`Condition.StringEquals.aws:SourceAccount` AND `Condition.ArnLike.aws:SourceArn`.**
+
+The `SourceAccount` pins the invoking AWS account. The `SourceArn` pins
+the specific resource (e.g. a specific AgentCore memory, specific
+EventBridge rule) that is allowed to trigger the action.
+
+## CDK remediation patterns
+
+### S3 bucket service-principal grant (TypeScript)
+
+```ts
+bucket.addToResourcePolicy(new iam.PolicyStatement({
+  effect: iam.Effect.ALLOW,
+  principals: [new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com")],
+  actions: ["s3:PutObject"],
+  resources: [bucket.arnForObjects("memories/*")],
+  conditions: {
+    StringEquals: {
+      "aws:SourceAccount": cdk.Stack.of(bucket).account,
+    },
+    ArnLike: {
+      "aws:SourceArn": `arn:aws:bedrock-agentcore:${region}:${account}:memory/*`,
+    },
+  },
+}));
+```
+
+### SNS topic policy
+
+```ts
+topic.addToResourcePolicy(new iam.PolicyStatement({
+  effect: iam.Effect.ALLOW,
+  principals: [new iam.ServicePrincipal("events.amazonaws.com")],
+  actions: ["sns:Publish"],
+  resources: [topic.topicArn],
+  conditions: {
+    StringEquals: { "aws:SourceAccount": cdk.Stack.of(topic).account },
+    ArnLike: { "aws:SourceArn": rule.ruleArn },
+  },
+}));
+```
+
+### KMS key policy (service principal consumers)
+
+```ts
+key.addToResourcePolicy(new iam.PolicyStatement({
+  effect: iam.Effect.ALLOW,
+  principals: [new iam.ServicePrincipal("sqs.amazonaws.com")],
+  actions: ["kms:GenerateDataKey", "kms:Decrypt"],
+  resources: ["*"],
+  conditions: {
+    StringEquals: { "aws:SourceAccount": cdk.Stack.of(key).account },
+  },
+}));
+```
+
+## When you genuinely need cross-account
+
+If a legitimate use case requires accepting calls from another AWS
+account, that account must be **pinned explicitly** — never left open:
+
+```ts
+conditions: {
+  StringEquals: {
+    "aws:SourceAccount": ["111111111111", "222222222222"],  // explicit list
+  },
+}
+```
+
+And document it in `docs/SECURITY.md` controls matrix + threat model.
+
+## References
+
+- [AWS docs: confused deputy problem](https://docs.aws.amazon.com/IAM/latest/UserGuide/confused-deputy.html)
+- viking-context-service commits: `15e104c`, `b5a25bf`
+- Golden principle: `P-02`
+- Lint: `tools/lints/cdk-confused-deputy.ts`
