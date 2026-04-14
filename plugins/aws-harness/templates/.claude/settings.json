@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings",
-  "_comment": "Scaffolded by harness-init. M5 wires the red-test pre-commit block; M6 will add postmortem-capture, session-start brief, and stop learning flush. Do not hand-edit — run /harness-init --upgrade.",
+  "_comment": "Scaffolded by harness-init. M5 wired the red-test pre-commit block; M6 wires postmortem capture, session-start brief, and stop learning flush. Do not hand-edit — run /harness-init --upgrade.",
   "enabledPlugins": [
     "aws-harness",
     "aws-cdk",
@@ -9,10 +9,40 @@
     "serverless-eda"
   ],
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "command": "bash .claude/hooks/session-start-brief.sh"
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash(git commit:*)",
         "command": "bash .claude/hooks/pre-commit-red-test-block.sh"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash(cdk deploy:*)",
+        "command": "bash .claude/hooks/post-tool-use-capture.sh"
+      },
+      {
+        "matcher": "Bash(cdk destroy:*)",
+        "command": "bash .claude/hooks/post-tool-use-capture.sh"
+      },
+      {
+        "matcher": "Bash(npm test:*)",
+        "command": "bash .claude/hooks/post-tool-use-capture.sh"
+      },
+      {
+        "matcher": "Bash(pytest:*)",
+        "command": "bash .claude/hooks/post-tool-use-capture.sh"
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "command": "bash .claude/hooks/stop-learning-flush.sh"
       }
     ]
   }

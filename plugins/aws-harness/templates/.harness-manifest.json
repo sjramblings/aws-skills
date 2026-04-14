@@ -1,6 +1,6 @@
 {
-  "harness_version": "0.6.0",
-  "milestone": "M5",
+  "harness_version": "0.7.0",
+  "milestone": "M6",
   "bootstrap": {
     "project_name": "{{PROJECT_NAME}}",
     "uat_region": "{{UAT_REGION}}",
@@ -35,6 +35,9 @@
     ".github/workflows/lint.yml",
     ".github/workflows/post-deploy-verify.yml",
     ".claude/hooks/pre-commit-red-test-block.sh",
+    ".claude/hooks/post-tool-use-capture.sh",
+    ".claude/hooks/session-start-brief.sh",
+    ".claude/hooks/stop-learning-flush.sh",
     "tools/scripts/smoke-test-template.yaml",
     ".harness/probe-matrix.json",
     "docs/references/confused-deputy-llms.txt",
