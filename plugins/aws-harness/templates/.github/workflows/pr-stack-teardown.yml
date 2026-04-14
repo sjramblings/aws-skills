@@ -1,0 +1,112 @@
+name: pr-stack-teardown
+
+# Destroys per-PR ephemeral stacks. Triggers:
+# - PR close (matching stack name pr-<N>-<project>)
+# - Nightly cron: GC any stack tagged harness:env=pr whose harness:ttl
+#   has elapsed since creation.
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    # 02:00 UTC daily — after most devs have gone home in most timezones
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      force_all:
+        description: 'Destroy ALL pr-* stacks (danger)'
+        required: false
+        default: 'false'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  teardown:
+    name: Teardown
+    runs-on: ubuntu-latest
+    environment: pr
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_PRIMARY_REGION }}
+          role-session-name: pr-teardown
+
+      - name: Close-triggered teardown
+        if: github.event_name == 'pull_request'
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          PROJECT=$(jq -r '.bootstrap.project_name' .harness-manifest.json)
+          STACK="pr-${PR}-${PROJECT}"
+          echo "Destroying ${STACK}"
+          if aws cloudformation describe-stacks --stack-name "$STACK" --region "${{ vars.AWS_PRIMARY_REGION }}" >/dev/null 2>&1; then
+            aws cloudformation delete-stack --stack-name "$STACK" --region "${{ vars.AWS_PRIMARY_REGION }}"
+            aws cloudformation wait stack-delete-complete --stack-name "$STACK" --region "${{ vars.AWS_PRIMARY_REGION }}" || {
+              echo "::warning ::delete-complete wait timed out; stack may still be deleting"
+            }
+          else
+            echo "Stack ${STACK} does not exist; nothing to do"
+          fi
+
+      - name: Nightly GC — find TTL-expired pr-* stacks
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          REGION="${{ vars.AWS_PRIMARY_REGION }}"
+          force_all="${{ github.event.inputs.force_all || 'false' }}"
+
+          # List all stacks starting with pr-
+          stacks=$(aws cloudformation list-stacks \
+            --region "$REGION" \
+            --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE CREATE_FAILED UPDATE_FAILED ROLLBACK_COMPLETE \
+            --query "StackSummaries[?starts_with(StackName, 'pr-')].{name:StackName, created:CreationTime}" \
+            --output json)
+
+          echo "$stacks" | jq -c '.[]' | while read -r row; do
+            name=$(echo "$row" | jq -r '.name')
+            created=$(echo "$row" | jq -r '.created')
+
+            # Fetch harness:ttl tag
+            tags=$(aws cloudformation describe-stacks --region "$REGION" --stack-name "$name" --query 'Stacks[0].Tags' --output json 2>/dev/null || echo '[]')
+            ttl=$(echo "$tags" | jq -r '.[] | select(.Key=="harness:ttl") | .Value' | head -1)
+            env=$(echo "$tags" | jq -r '.[] | select(.Key=="harness:env") | .Value' | head -1)
+
+            # Only touch harness-managed pr stacks
+            if [[ "$env" != "pr" ]]; then
+              echo "skip ${name} (not harness:env=pr)"
+              continue
+            fi
+            [[ -z "$ttl" || "$ttl" == "null" ]] && ttl="72h"
+
+            # Parse TTL duration
+            num="${ttl%[mhd]}"
+            unit="${ttl: -1}"
+            case "$unit" in
+              m) secs=$(( num * 60 )) ;;
+              h) secs=$(( num * 3600 )) ;;
+              d) secs=$(( num * 86400 )) ;;
+              *) secs=259200 ;;  # default 72h
+            esac
+
+            created_epoch=$(date -u -d "$created" +%s 2>/dev/null || date -u -jf "%Y-%m-%dT%H:%M:%S.%NZ" "$created" +%s 2>/dev/null || echo 0)
+            now_epoch=$(date -u +%s)
+            age=$(( now_epoch - created_epoch ))
+
+            if [[ "$force_all" == "true" ]] || (( age > secs )); then
+              echo "DESTROY ${name} (age=${age}s ttl=${secs}s)"
+              aws cloudformation delete-stack --stack-name "$name" --region "$REGION" || {
+                echo "::warning ::delete-stack failed for $name"
+              }
+            else
+              echo "keep ${name} (age=${age}s ttl=${secs}s)"
+            fi
+          done
