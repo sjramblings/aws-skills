@@ -101,3 +101,11 @@ Desktop.ini
 # Claude Code
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Plugin templates — exempt from Python/CDK ignore patterns above.
+# These directories are scaffold sources, NOT runtime artifacts, so they
+# must be tracked even though they look like 'lib/', 'cdk.out/', 'build/' etc.
+!plugins/aws-harness/templates/cdk/
+!plugins/aws-harness/templates/cdk/**
+!plugins/aws-harness/templates/cdk/lib/
+!plugins/aws-harness/templates/cdk/lib/**
