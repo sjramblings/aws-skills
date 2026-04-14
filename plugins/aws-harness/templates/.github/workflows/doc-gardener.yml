@@ -1,0 +1,163 @@
+name: doc-gardener
+
+# Daily 04:00 UTC garbage-collection sweep over docs/ and ARCHITECTURE.md.
+# Runs the doc-gardener and architecture-drift-detector skills, opens
+# narrowly-scoped PRs labeled `doc-gardener`, and auto-merges those PRs
+# under strict conditions:
+#   - label exactly `doc-gardener`
+#   - only changes to docs/** or AGENTS.md
+#   - all required CI checks green
+#
+# Lopopolo's "under 1 minute review" garbage-collection pattern.
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      open_prs:
+        description: 'Actually open PRs (default: dry-run)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  garden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      drift_count: ${{ steps.drift.outputs.count }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure git
+        run: |
+          git config user.name "doc-gardener[bot]"
+          git config user.email "doc-gardener@users.noreply.github.com"
+
+      - name: Run doc-gardener
+        run: |
+          set -euo pipefail
+          OPEN_FLAG=""
+          if [[ "${{ inputs.open_prs || 'false' }}" == "true" ]] || [[ "${{ github.event_name }}" == "schedule" ]]; then
+            OPEN_FLAG="--open-prs"
+          fi
+          bash plugins/aws-harness/skills/doc-gardener/scripts/garden.sh \
+            --scope all \
+            $OPEN_FLAG \
+            --max-prs 5 \
+            | tee garden-findings.tsv
+
+      - name: Run architecture-drift-detector
+        id: drift
+        if: hashFiles('cdk/**') != ''
+        run: |
+          set -euo pipefail
+          bash plugins/aws-harness/skills/architecture-drift-detector/scripts/detect.sh \
+            --app ./cdk \
+            --doc docs/ARCHITECTURE.md \
+            | tee drift-findings.tsv
+          # count non-header rows
+          count=$(awk 'NR>1 && NF>0 {n++} END{print n+0}' drift-findings.tsv)
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: Open architecture-drift issue
+        if: steps.drift.outputs.count != '0' && steps.drift.outputs.count != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const drift = fs.readFileSync('drift-findings.tsv', 'utf8');
+            const title = `architecture-drift-detector: ${process.env.DRIFT_COUNT || '?'} drift finding(s)`;
+            // dedupe: search for an open issue with the same title
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              labels: 'doc-gardener', state: 'open', per_page: 100,
+            });
+            if (existing.data.find(i => i.title === title)) {
+              console.log('issue already open');
+              return;
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title,
+              labels: ['doc-gardener', 'architecture-drift'],
+              body: `Auto-detected by architecture-drift-detector daily cron.\n\n\`\`\`\n${drift}\n\`\`\`\n\nDecide: update \`docs/ARCHITECTURE.md\` to match code, OR fix the code to match the doc. Do not auto-resolve — drift is human-judgment territory.`,
+            });
+        env:
+          DRIFT_COUNT: ${{ steps.drift.outputs.count }}
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc-gardener-findings
+          path: |
+            garden-findings.tsv
+            drift-findings.tsv
+          retention-days: 14
+
+  auto-merge:
+    name: Auto-merge doc-gardener PRs
+    runs-on: ubuntu-latest
+    needs: garden
+    if: github.event_name == 'schedule'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Auto-merge eligible PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', per_page: 100,
+            });
+            for (const pr of prs.data) {
+              const labels = pr.labels.map(l => l.name);
+              if (!labels.includes('doc-gardener')) continue;
+              if (labels.length !== 1) {
+                console.log(`skip #${pr.number}: extra labels ${labels.join(',')}`);
+                continue;
+              }
+              const files = await github.rest.pulls.listFiles({
+                owner: context.repo.owner, repo: context.repo.repo,
+                pull_number: pr.number, per_page: 100,
+              });
+              const allDocs = files.data.every(f =>
+                f.filename.startsWith('docs/') || f.filename === 'AGENTS.md'
+              );
+              if (!allDocs) {
+                console.log(`skip #${pr.number}: non-docs file changes`);
+                continue;
+              }
+              try {
+                await github.rest.pulls.merge({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  pull_number: pr.number,
+                  merge_method: 'squash',
+                });
+                console.log(`merged #${pr.number}`);
+              } catch (e) {
+                console.log(`merge failed #${pr.number}: ${e.message}`);
+              }
+            }
