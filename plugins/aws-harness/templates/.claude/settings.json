@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings",
+  "_comment": "Scaffolded by harness-init M0. Hooks are added in M5 (red-test block) and M6 (postmortem capture, session-start brief, stop learning flush). Do not hand-edit this file — run /harness-init --upgrade to pull changes.",
+  "enabledPlugins": [
+    "aws-harness",
+    "aws-cdk",
+    "aws-common",
+    "aws-cost-ops",
+    "serverless-eda"
+  ],
+  "hooks": {}
+}

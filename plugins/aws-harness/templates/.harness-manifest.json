@@ -1,0 +1,34 @@
+{
+  "harness_version": "0.1.0",
+  "milestone": "M0",
+  "bootstrap": {
+    "project_name": "{{PROJECT_NAME}}",
+    "uat_region": "{{UAT_REGION}}",
+    "prod_region": "{{PROD_REGION}}",
+    "sandbox_account": "{{SANDBOX_ACCOUNT}}",
+    "owner": "{{OWNER}}"
+  },
+  "mode": "greenfield",
+  "scaffolded_files": [
+    "AGENTS.md",
+    "docs/ARCHITECTURE.md",
+    "docs/SECURITY.md",
+    "docs/RELIABILITY.md",
+    "docs/QUALITY_SCORE.md",
+    "docs/golden-principles.md",
+    "docs/design-docs/.gitkeep",
+    "docs/exec-plans/active/.gitkeep",
+    "docs/exec-plans/completed/.gitkeep",
+    "docs/product-specs/.gitkeep",
+    "docs/threat-models/.gitkeep",
+    "docs/learnings/INDEX.md",
+    "docs/references/.gitkeep",
+    "docs/runbooks/.gitkeep",
+    "docs/smoke-tests/.gitkeep",
+    ".claude/settings.json",
+    ".claude/hooks/.gitkeep",
+    ".github/workflows/.gitkeep",
+    "tools/lints/.gitkeep",
+    "tools/scripts/.gitkeep"
+  ]
+}
