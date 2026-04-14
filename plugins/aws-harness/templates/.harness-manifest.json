@@ -1,6 +1,6 @@
 {
-  "harness_version": "0.7.0",
-  "milestone": "M6",
+  "harness_version": "0.8.0",
+  "milestone": "M7",
   "bootstrap": {
     "project_name": "{{PROJECT_NAME}}",
     "uat_region": "{{UAT_REGION}}",
@@ -34,6 +34,7 @@
     ".github/workflows/threat-model-check.yml",
     ".github/workflows/lint.yml",
     ".github/workflows/post-deploy-verify.yml",
+    ".github/workflows/doc-gardener.yml",
     ".claude/hooks/pre-commit-red-test-block.sh",
     ".claude/hooks/post-tool-use-capture.sh",
     ".claude/hooks/session-start-brief.sh",
