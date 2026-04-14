@@ -1,6 +1,6 @@
 {
-  "harness_version": "0.3.0",
-  "milestone": "M2",
+  "harness_version": "0.4.0",
+  "milestone": "M3",
   "bootstrap": {
     "project_name": "{{PROJECT_NAME}}",
     "uat_region": "{{UAT_REGION}}",
@@ -29,8 +29,11 @@
     ".claude/hooks/.gitkeep",
     ".github/workflows/.gitkeep",
     ".github/workflows/capability-probe.yml",
+    ".github/workflows/pr-stack.yml",
+    ".github/workflows/pr-stack-teardown.yml",
     ".harness/probe-matrix.json",
     "tools/lints/.gitkeep",
-    "tools/scripts/.gitkeep"
+    "tools/scripts/.gitkeep",
+    "tools/scripts/pr-stack-budget.sh"
   ]
 }

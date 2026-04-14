@@ -1,0 +1,126 @@
+name: pr-stack
+
+# Deploys a per-PR ephemeral stack on PR open/sync. Torn down by
+# pr-stack-teardown.yml on close + nightly cron. Runs under the `pr`
+# GitHub environment with OIDC.
+#
+# Requires repo variables (set by the github-environments skill):
+#   AWS_DEPLOY_ROLE_ARN (env: pr)
+#   AWS_PRIMARY_REGION  (env: pr)
+# Requires .harness/probe-matrix.json and passing capability-probe.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'cdk/**'
+      - 'lib/**'
+      - 'bin/**'
+      - 'cdk.json'
+      - 'package.json'
+      - '.harness/**'
+      - '.github/workflows/pr-stack.yml'
+
+concurrency:
+  group: pr-stack-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: Deploy PR stack
+    runs-on: ubuntu-latest
+    environment: pr
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_PRIMARY_REGION }}
+          role-session-name: pr-${{ github.event.pull_request.number }}-deploy
+
+      - name: Capability probe (fresh)
+        run: |
+          set -euo pipefail
+          MODELS=$(jq -r '.models | join(",")' .harness/probe-matrix.json)
+          REGIONS=$(jq -r '.regions | join(",")' .harness/probe-matrix.json)
+          bash plugins/aws-harness/skills/capability-probe/scripts/probe.sh \
+            --models "$MODELS" --regions "$REGIONS" \
+            --output tsv --cache .harness-cache/capability-probe.json
+
+      - name: Deploy PR stack
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+          CAPABILITY_PROBE_CACHE: .harness-cache/capability-probe.json
+        run: |
+          set -euo pipefail
+          PROJECT=$(jq -r '.bootstrap.project_name' .harness-manifest.json)
+          bash plugins/aws-harness/skills/deploy-pr-stack/scripts/deploy.sh \
+            --pr "${{ github.event.pull_request.number }}" \
+            --project "$PROJECT" \
+            --app ./cdk \
+            --ttl "${{ vars.HARNESS_PR_TTL || '72h' }}"
+
+      - name: Comment PR with outputs
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const pr = context.issue.number;
+            const project = JSON.parse(fs.readFileSync('.harness-manifest.json', 'utf8')).bootstrap.project_name;
+            const stack = `pr-${pr}-${project}`;
+            let outputs = '(no outputs captured)';
+            try {
+              outputs = fs.readFileSync(`.harness-cache/pr-stack-outputs-${pr}.json`, 'utf8');
+            } catch (e) {}
+            const body = [
+              '## PR stack deployed',
+              '',
+              `- Stack: \`${stack}\``,
+              `- Actor: @${context.actor}`,
+              `- TTL: ${process.env.HARNESS_PR_TTL || '72h'}`,
+              '',
+              '### CFN Outputs',
+              '```json',
+              outputs,
+              '```',
+              '',
+              'Close the PR to tear down, or wait for the nightly GC.'
+            ].join('\n');
+            github.rest.issues.createComment({ issue_number: pr, owner: context.repo.owner, repo: context.repo.repo, body });
+
+      - name: Comment PR on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '## PR stack deploy FAILED',
+              '',
+              'See the workflow log for the compact cfn-stack-events output.',
+              'Common causes: capability-probe red, IAM gap, CFN resource conflict.',
+              '',
+              'Run `capability-probe` locally and check `docs/golden-principles.md`.'
+            ].join('\n');
+            github.rest.issues.createComment({ issue_number: context.issue.number, owner: context.repo.owner, repo: context.repo.repo, body });
