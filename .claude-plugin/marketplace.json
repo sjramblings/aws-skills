@@ -172,7 +172,7 @@
     {
       "name": "aws-harness",
       "description": "Claude Code harness for AWS projects — scaffolds docs/ system-of-record, AGENTS.md map, .claude/ hooks, .github/ workflows, custom lints, per-PR ephemeral stacks, and a learning/feedback loop. Based on Lopopolo's harness engineering principles.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "Stephen Jones",
         "email": "steve@sjramblings.io"
@@ -191,7 +191,8 @@
         "./skills/harness-init",
         "./skills/cfn-stack-events",
         "./skills/cloudwatch-query",
-        "./skills/cloudtrail-investigator"
+        "./skills/cloudtrail-investigator",
+        "./skills/capability-probe"
       ]
     }
   ]

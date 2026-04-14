@@ -1,0 +1,10 @@
+{
+  "_comment": "Capability-probe matrix for {{PROJECT_NAME}}. Consumed by .github/workflows/capability-probe.yml and by the capability-probe skill locally. Update whenever you add a new Bedrock model or a new region to the project.",
+  "models": [
+    "amazon.nova-micro-v1:0"
+  ],
+  "regions": [
+    "{{UAT_REGION}}",
+    "{{PROD_REGION}}"
+  ]
+}
