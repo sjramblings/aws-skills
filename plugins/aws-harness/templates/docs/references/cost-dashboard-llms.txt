@@ -1,0 +1,135 @@
+---
+owner: "@{{OWNER}}"
+updated: 2026-04-15
+status: active
+---
+
+# Cost Dashboard & Bedrock Cost Instrumentation — Reference (llms.txt)
+
+Referenced by `tools/lints/bedrock-cost-instrumentation.ts` and consumed
+by `cloudwatch-query`. Auto-loaded into agent context whenever the lint
+fires or a cost question comes up. Implements golden principle **P-08**
+("Bedrock clients must be wrapped with `withCostInstrumentation`").
+
+## Why this exists
+
+viking-context-service lesson 12: cost instrumentation was added late
+(retroactive Phase 6 work after a surprise bill). With this construct,
+every project gets token tracking + a monthly budget alarm + a per-stack
+dashboard from day 1 — no surprises.
+
+## The two pieces
+
+### 1. `withCostInstrumentation(client)` — wraps the Bedrock client
+
+Drop-in wrapper around `BedrockRuntimeClient` that logs a structured
+line on every `invoke`:
+
+```
+BEDROCK_USAGE model=<id> input_tokens=<n> output_tokens=<n>
+```
+
+The `CostInstrumentationConstruct` defines a CloudWatch metric filter
+that parses these lines into the `BedrockInputTokens` and
+`BedrockOutputTokens` metrics under the `harness/<project>` namespace.
+
+#### Lambda example
+
+```ts
+import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+import { withCostInstrumentation } from "/opt/cost-instrumentation";
+
+const bedrock = withCostInstrumentation(
+  new BedrockRuntimeClient({ region: process.env.AWS_REGION })
+);
+
+export async function handler(event: any) {
+  const result = await bedrock.send(new InvokeModelCommand({
+    modelId: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    body: JSON.stringify({
+      anthropic_version: "bedrock-2023-05-31",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: event.prompt }],
+    }),
+  }));
+  return JSON.parse(new TextDecoder().decode(result.body));
+}
+```
+
+The wrapper is a **drop-in replacement** — swap the constructor call,
+nothing else changes. The lint catches any Bedrock client that bypasses
+the wrapper.
+
+### 2. `CostInstrumentationConstruct` — attach to the stack
+
+```ts
+import { CostInstrumentationConstruct } from "../lib/cost-instrumentation";
+
+const fn = new lambda.NodejsFunction(this, "Handler", { ... });
+
+new CostInstrumentationConstruct(this, "CostGuard", {
+  logGroups: [fn.logGroup],
+  project: "viking-context-service",
+  env: "uat",
+  owner: "sjramblings",
+  costCenter: "research",
+  dataClassification: "internal",
+  monthlyBudgetUsd: 250,
+  notificationTopicArn: alarmTopic.topicArn,
+});
+```
+
+What this provisions:
+
+- **Required tags** applied to the entire stack: `owner`, `cost-center`,
+  `data-classification`, `harness:env`, `harness:project`. The
+  `cdk-resource-tags` lint (P-06) fails synth without these.
+- **Two metric filters per log group**: `BedrockInputTokens` and
+  `BedrockOutputTokens` under `harness/<project>` namespace, dimensioned
+  by `Env`.
+- **AWS Budget** (default $100/month) scoped via cost-allocation tags.
+  Notifications at 80% and 100% to the SNS topic if provided.
+- **CloudWatch dashboard** named `harness-<project>-<env>-cost` with a
+  token line graph and an estimated-charges single-value widget.
+
+## One-time per-account setup
+
+The Budget cost filters use cost-allocation tags. These must be
+**activated** in Billing preferences once per account:
+
+1. Sign in to the AWS Billing console as the management account.
+2. Cost allocation tags → User-defined cost allocation tags.
+3. Activate: `harness:project`, `harness:env`, `harness:pr` (for M3).
+4. Wait up to 24 hours for new costs to start being attributed.
+
+If skipped, the budget will not fire — track this in the project runbook
+and `docs/QUALITY_SCORE.md`.
+
+## Querying tokens via cloudwatch-query
+
+The `cloudwatch-query` skill (M1) understands the metric namespace:
+
+```bash
+bash plugins/aws-harness/skills/cloudwatch-query/scripts/query.sh \
+  "function=my-handler contains=BEDROCK_USAGE last=1h"
+```
+
+Returns the top-N grouped lines, deduped by model ID. Use this to
+diagnose token spikes before they become a budget alarm.
+
+## Common patterns
+
+| Symptom | Diagnosis path |
+|---|---|
+| Budget alarm at 80% | `cloudwatch-query "function=<handler> contains=BEDROCK_USAGE last=24h"` to find the spike |
+| Token count flatlined at 0 | wrapper not applied (lint will catch this); check imports |
+| Dashboard widget empty | metric filter pattern mismatch — verify the log line format matches `BEDROCK_USAGE model=... input_tokens=... output_tokens=...` |
+| Budget never fires | cost-allocation tags not activated in Billing prefs (see above) |
+
+## References
+
+- `templates/cdk/lib/cost-instrumentation.ts`
+- `tools/lints/bedrock-cost-instrumentation.ts`
+- `tools/lints/cdk-resource-tags.ts`
+- Golden principle: P-08
+- viking-context-service retrospective lesson 12
