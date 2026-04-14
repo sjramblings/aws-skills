@@ -1,6 +1,6 @@
 {
-  "harness_version": "0.9.0",
-  "milestone": "M8",
+  "harness_version": "1.0.0",
+  "milestone": "M9",
   "bootstrap": {
     "project_name": "{{PROJECT_NAME}}",
     "uat_region": "{{UAT_REGION}}",
