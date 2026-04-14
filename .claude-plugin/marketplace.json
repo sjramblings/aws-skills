@@ -168,6 +168,28 @@
         "./skills/commit",
         "./skills/validate-commit"
       ]
+    },
+    {
+      "name": "aws-harness",
+      "description": "Claude Code harness for AWS projects — scaffolds docs/ system-of-record, AGENTS.md map, .claude/ hooks, .github/ workflows, custom lints, per-PR ephemeral stacks, and a learning/feedback loop. Based on Lopopolo's harness engineering principles.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Stephen Jones",
+        "email": "steve@sjramblings.io"
+      },
+      "homepage": "https://github.com/sjramblings/aws-skills",
+      "repository": "https://github.com/sjramblings/aws-skills",
+      "license": "MIT",
+      "keywords": ["aws", "harness", "scaffold", "cdk", "observability", "feedback-loop", "agents-md", "lints", "per-pr-stack"],
+      "category": "development",
+      "source": "./plugins/aws-harness",
+      "strict": false,
+      "commands": [
+        "./commands/harness-init.md"
+      ],
+      "skills": [
+        "./skills/harness-init"
+      ]
     }
   ]
 }
