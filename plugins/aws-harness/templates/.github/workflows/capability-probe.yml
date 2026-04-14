@@ -1,0 +1,102 @@
+name: capability-probe
+
+# Blocks PRs that touch cdk/ until the (model, region) matrix is green.
+# Populated by harness-init; see docs/references/capability-probe-llms.txt
+# (referenced by M4 lints) and docs/golden-principles.md P-01/P-11.
+
+on:
+  pull_request:
+    paths:
+      - 'cdk/**'
+      - 'lib/**'
+      - 'bin/**'
+      - 'cdk.json'
+      - '.harness-manifest.json'
+  workflow_dispatch:
+    inputs:
+      models:
+        description: 'Comma-separated Bedrock model IDs'
+        required: true
+      regions:
+        description: 'Comma-separated AWS regions'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_PRIMARY_REGION || 'us-east-1' }}
+
+      - name: Resolve probe matrix
+        id: matrix
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.models || '' }}" ]]; then
+            MODELS="${{ inputs.models }}"
+            REGIONS="${{ inputs.regions }}"
+          elif [[ -f .harness/probe-matrix.json ]]; then
+            MODELS=$(jq -r '.models | join(",")' .harness/probe-matrix.json)
+            REGIONS=$(jq -r '.regions | join(",")' .harness/probe-matrix.json)
+          else
+            echo "::warning ::.harness/probe-matrix.json missing; using defaults from vars"
+            MODELS="${{ vars.PROBE_MODELS || 'amazon.nova-micro-v1:0' }}"
+            REGIONS="${{ vars.PROBE_REGIONS || 'us-east-1' }}"
+          fi
+          echo "models=$MODELS" >> "$GITHUB_OUTPUT"
+          echo "regions=$REGIONS" >> "$GITHUB_OUTPUT"
+
+      - name: Run capability-probe
+        id: probe
+        run: |
+          set -euo pipefail
+          # The script exits non-zero if any row is red.
+          bash plugins/aws-harness/skills/capability-probe/scripts/probe.sh \
+            --models "${{ steps.matrix.outputs.models }}" \
+            --regions "${{ steps.matrix.outputs.regions }}" \
+            --output tsv \
+            --cache .harness-cache/capability-probe.json \
+            | tee probe-output.tsv
+
+      - name: Upload probe cache
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capability-probe-cache
+          path: .harness-cache/capability-probe.json
+          retention-days: 14
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '## capability-probe FAILED\n\n';
+            body += 'One or more `(model, region)` pairs are not ready. Fix before merging.\n\n';
+            body += '```\n';
+            try {
+              body += fs.readFileSync('probe-output.tsv', 'utf8');
+            } catch (e) {
+              body += '(probe output not captured)';
+            }
+            body += '\n```\n';
+            body += '\nSee `docs/golden-principles.md#P-01` and run `capability-probe` locally to iterate.';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

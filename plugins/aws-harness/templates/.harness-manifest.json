@@ -1,6 +1,6 @@
 {
-  "harness_version": "0.1.0",
-  "milestone": "M0",
+  "harness_version": "0.3.0",
+  "milestone": "M2",
   "bootstrap": {
     "project_name": "{{PROJECT_NAME}}",
     "uat_region": "{{UAT_REGION}}",
@@ -28,6 +28,8 @@
     ".claude/settings.json",
     ".claude/hooks/.gitkeep",
     ".github/workflows/.gitkeep",
+    ".github/workflows/capability-probe.yml",
+    ".harness/probe-matrix.json",
     "tools/lints/.gitkeep",
     "tools/scripts/.gitkeep"
   ]

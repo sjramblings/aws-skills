@@ -7,3 +7,4 @@ cdk.out/
 .DS_Store
 coverage/
 .harness-cache/
+# .harness/ IS committed (probe-matrix etc); only .harness-cache/ is not
