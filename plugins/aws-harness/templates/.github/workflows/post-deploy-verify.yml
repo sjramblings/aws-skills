@@ -1,0 +1,112 @@
+name: post-deploy-verify
+
+# Runs smoke tests + integration tests against the per-PR stack after a
+# successful deploy. Triggered by workflow_run on completion of pr-stack.yml.
+#
+# Two jobs in sequence:
+#   smoke: post-deploy-verify skill against docs/smoke-tests/*.yaml
+#   integration: integration-test-runner skill against the same stack
+
+on:
+  workflow_run:
+    workflows: ["pr-stack"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      stack_name:
+        description: 'Stack name to verify'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  smoke:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    environment: pr
+    timeout-minutes: 10
+    outputs:
+      stack_name: ${{ steps.resolve.outputs.stack_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_PRIMARY_REGION }}
+
+      - name: Resolve PR + stack
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            STACK="${{ inputs.stack_name }}"
+            PR=$(echo "$STACK" | sed -E 's/^pr-([0-9]+)-.*/\1/')
+          else
+            PR="${{ github.event.workflow_run.pull_requests[0].number }}"
+            PROJECT=$(jq -r '.bootstrap.project_name' .harness-manifest.json)
+            STACK="pr-${PR}-${PROJECT}"
+          fi
+          echo "stack_name=${STACK}" >> "$GITHUB_OUTPUT"
+          echo "pr=${PR}" >> "$GITHUB_OUTPUT"
+
+      - name: Run smoke tests
+        run: |
+          set -euo pipefail
+          PR="${{ steps.resolve.outputs.pr }}"
+          for spec in docs/smoke-tests/*.yaml; do
+            [[ -f "$spec" ]] || continue
+            echo "=== $spec ==="
+            bash plugins/aws-harness/skills/post-deploy-verify/scripts/verify.sh \
+              --spec "$spec" --pr "$PR" --bail
+          done
+
+  integration:
+    needs: smoke
+    if: ${{ needs.smoke.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: pr
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_PRIMARY_REGION }}
+
+      - name: Run integration tests
+        run: |
+          set -euo pipefail
+          bash plugins/aws-harness/skills/integration-test-runner/scripts/run.sh \
+            --stack "${{ needs.smoke.outputs.stack_name }}" \
+            --runner auto \
+            --bail \
+            --timeout-minutes 15

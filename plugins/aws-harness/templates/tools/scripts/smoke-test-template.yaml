@@ -1,0 +1,61 @@
+# Smoke test template for {{PROJECT_NAME}}.
+# Copy this into docs/smoke-tests/<service>.yaml and customize.
+# Consumed by the post-deploy-verify skill on every deploy.
+
+service: example-service
+
+# Stack name template. Substitutions: ${PR_NUMBER} for per-PR stacks.
+# For uat/prod, hardcode the stack name.
+stack_name: pr-${PR_NUMBER}-{{PROJECT_NAME}}
+
+# Map short alias -> CFN OutputKey. Substituted into URLs/headers/body
+# as {alias} placeholders.
+outputs:
+  api_url: ApiEndpoint
+  bucket_name: ContentBucketName
+
+defaults:
+  timeout_seconds: 10
+  retries: 3
+  retry_delay_seconds: 5
+
+tests:
+  - name: health
+    request:
+      method: GET
+      url: "{api_url}/health"
+    expect:
+      status: 200
+      body_contains: "ok"
+
+  - name: readiness
+    request:
+      method: GET
+      url: "{api_url}/ready"
+    expect:
+      status_in: [200, 204]
+
+  # Example: write path with header auth. Uncomment + fill in.
+  # - name: ingest_simple
+  #   request:
+  #     method: POST
+  #     url: "{api_url}/ingest"
+  #     headers:
+  #       content-type: application/json
+  #       x-api-key: "${SMOKE_API_KEY}"
+  #     body: |
+  #       {"uri":"smoke://test/1","content":"hello"}
+  #   expect:
+  #     status: 202
+  #     body_contains_path: "$.id"
+  #
+  # - name: ingest_invalid_uri
+  #   request:
+  #     method: POST
+  #     url: "{api_url}/ingest"
+  #     headers:
+  #       content-type: application/json
+  #       x-api-key: "${SMOKE_API_KEY}"
+  #     body: '{"uri":"BAD","content":"x"}'
+  #   expect:
+  #     status: 400

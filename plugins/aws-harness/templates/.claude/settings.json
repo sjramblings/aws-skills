@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings",
-  "_comment": "Scaffolded by harness-init M0. Hooks are added in M5 (red-test block) and M6 (postmortem capture, session-start brief, stop learning flush). Do not hand-edit this file — run /harness-init --upgrade to pull changes.",
+  "_comment": "Scaffolded by harness-init. M5 wires the red-test pre-commit block; M6 will add postmortem-capture, session-start brief, and stop learning flush. Do not hand-edit — run /harness-init --upgrade.",
   "enabledPlugins": [
     "aws-harness",
     "aws-cdk",
@@ -8,5 +8,12 @@
     "aws-cost-ops",
     "serverless-eda"
   ],
-  "hooks": {}
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git commit:*)",
+        "command": "bash .claude/hooks/pre-commit-red-test-block.sh"
+      }
+    ]
+  }
 }
