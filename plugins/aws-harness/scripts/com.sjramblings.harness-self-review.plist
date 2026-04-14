@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.sjramblings.harness-self-review.plist
+  macOS launchd job that runs the harness self-review weekly.
+
+  Install:
+    cp plugins/aws-harness/scripts/com.sjramblings.harness-self-review.plist \
+       ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.sjramblings.harness-self-review.plist
+
+  EDIT before installing:
+    - WorkingDirectory: absolute path to your aws-skills checkout
+    - StandardOutPath / StandardErrorPath: where to log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sjramblings.harness-self-review</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>plugins/aws-harness/scripts/harness-self-review.sh</string>
+    <string>--days</string>
+    <string>7</string>
+    <string>--threshold</string>
+    <string>3</string>
+    <string>--open-issues</string>
+    <string>--max-issues</string>
+    <string>5</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/stephenjones/GitHub/projects/aws-skills</string>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>10</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/stephenjones/.harness-self-review.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/stephenjones/.harness-self-review.err</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
