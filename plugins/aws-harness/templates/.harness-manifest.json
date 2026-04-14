@@ -1,6 +1,6 @@
 {
-  "harness_version": "0.8.0",
-  "milestone": "M7",
+  "harness_version": "0.9.0",
+  "milestone": "M8",
   "bootstrap": {
     "project_name": "{{PROJECT_NAME}}",
     "uat_region": "{{UAT_REGION}}",
@@ -44,6 +44,8 @@
     "docs/references/confused-deputy-llms.txt",
     "docs/references/parse-at-boundary-llms.txt",
     "docs/references/red-test-policy.md",
+    "docs/references/cost-dashboard-llms.txt",
+    "cdk/lib/cost-instrumentation.ts",
     "tools/lints/lint-types.ts",
     "tools/lints/run-lints.ts",
     "tools/lints/cdk-confused-deputy.ts",
