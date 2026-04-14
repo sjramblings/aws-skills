@@ -1,6 +1,6 @@
 {
-  "harness_version": "0.5.0",
-  "milestone": "M4",
+  "harness_version": "0.6.0",
+  "milestone": "M5",
   "bootstrap": {
     "project_name": "{{PROJECT_NAME}}",
     "uat_region": "{{UAT_REGION}}",
@@ -33,6 +33,9 @@
     ".github/workflows/pr-stack-teardown.yml",
     ".github/workflows/threat-model-check.yml",
     ".github/workflows/lint.yml",
+    ".github/workflows/post-deploy-verify.yml",
+    ".claude/hooks/pre-commit-red-test-block.sh",
+    "tools/scripts/smoke-test-template.yaml",
     ".harness/probe-matrix.json",
     "docs/references/confused-deputy-llms.txt",
     "docs/references/parse-at-boundary-llms.txt",
