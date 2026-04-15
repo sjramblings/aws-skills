@@ -14,6 +14,7 @@ import { lint as fifoMaxConcurrency } from "./cdk-fifo-maxconcurrency";
 import { lint as resourceTags } from "./cdk-resource-tags";
 import { lint as zodParseAtBoundary } from "./zod-parse-at-boundary";
 import { lint as bedrockCostInstrumentation } from "./bedrock-cost-instrumentation";
+import { lint as noCrossStackExports } from "./cdk-no-cross-stack-exports";
 
 const lints: Array<{ name: string; fn: LintFn }> = [
   { name: "cdk-confused-deputy", fn: confusedDeputy },
@@ -24,6 +25,7 @@ const lints: Array<{ name: string; fn: LintFn }> = [
   { name: "cdk-resource-tags", fn: resourceTags },
   { name: "zod-parse-at-boundary", fn: zodParseAtBoundary },
   { name: "bedrock-cost-instrumentation", fn: bedrockCostInstrumentation },
+  { name: "cdk-no-cross-stack-exports", fn: noCrossStackExports },
 ];
 
 function main() {

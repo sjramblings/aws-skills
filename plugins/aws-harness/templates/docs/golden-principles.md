@@ -23,7 +23,7 @@ status: active
 | P-07 | Parse every handler input at the boundary with Zod. No trust-by-default shapes. | `zod-parse-at-boundary.ts` (M4) | VCS ULID lowercasing bug #3 | no |
 | P-08 | Bedrock clients must be wrapped with `withCostInstrumentation`. Cost metrics from day 1. | `bedrock-cost-instrumentation.ts` (M8) | VCS retroactive cost instrumentation | no |
 | P-09 | Every async processing handler needs a circuit breaker and a lease TTL on its DynamoDB lock. | `aws-serverless-eda` skill patterns (M4 upgrade) | VCS 844647d Phase 43 | no |
-| P-10 | Cross-construct discovery uses SSM Parameter Store, not CloudFormation Outputs. Prevents circular dependencies. | `aws-cdk-development` skill reference (M4 upgrade) | VCS layered-construct pattern | advisory |
+| P-10 | Cross-stack discovery uses SSM Parameter Store dynamic references (`StringParameter.valueForStringParameter`), never `CfnOutput exportName` or construct attributes passed across stacks. Both create CloudFormation exports that deadlock updates. | `cdk-no-cross-stack-exports.ts` | VCS layered-construct pattern + EdgeSignal 2026-04-15 | no |
 | P-11 | Boring tech first. If a feature requires exotic infra (streaming through API GW, etc.), probe and write an ADR before building. | `capability-probe` + design-doc gate | VCS MCP+Lambda-Web-Adapter streaming | no |
 | P-12 | Known-red tests block commits. Never defer a failing test to "fix later." | `pre-commit-red-test-block.sh` (M5) | VCS Phases 2-5 bedrock.test.ts drag | no |
 | P-13 | Every new service directory requires a STRIDE threat model before merge. | `threat-model-check.yml` (M4) | VCS 28 post-launch Council findings | no |

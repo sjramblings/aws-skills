@@ -510,27 +510,159 @@ new NodejsFunction(this, 'Function', {
 });
 ```
 
-### ❌ Ignoring Stack Outputs
+### ❌ Cross-stack references via CloudFormation exports
+
+**Do not** use `CfnOutput` with `exportName` — or pass construct attributes
+as props across stacks — to wire one stack to another. CDK turns both
+into CloudFormation `Export` / `Fn::ImportValue` pairs. Once a consumer
+stack imports an export, the producer stack **cannot update or remove
+that export** without first removing the importer. This is a production
+deadlock waiting to happen.
+
+**Real incident (EdgeSignal, 2026-04-15):** `EdgeSignal-Frontend` pulled
+Cognito and API URL tokens from `EdgeSignal-Api`. CDK synthesized them as
+CloudFormation exports. When Api updated in a way that removed those
+exports, CloudFormation refused the update because Frontend still held
+`ExportsOutputRefUserPool...`. The fix was to rip out all cross-stack
+exports and move to SSM Parameter Store dynamic references.
 
 ```typescript
-// BAD - No way to reference resources
-new MyStack(app, 'Stack', {});
+// ❌ BAD — produces cross-stack CloudFormation exports via CfnOutput
+class ApiStack extends Stack {
+  public readonly userPool: cognito.UserPool;
+  public readonly api: apigateway.RestApi;
 
-// GOOD - Export important values
-class MyStack extends Stack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
-
-    const api = new apigateway.RestApi(this, 'Api', {});
+    this.userPool = new cognito.UserPool(this, 'UserPool');
+    this.api = new apigateway.RestApi(this, 'Api');
 
     new CfnOutput(this, 'ApiUrl', {
-      value: api.url,
-      description: 'API Gateway URL',
-      exportName: 'MyApiUrl',
+      value: this.api.url,
+      exportName: 'MyApiUrl', // 🔥 cross-stack deadlock risk
     });
   }
 }
+
+// ❌ BAD — passing construct attributes across stacks implicitly
+// creates the same export/import pair at synth time.
+new FrontendStack(app, 'Frontend', {
+  apiUrl: api.api.url,                   // 🔥 becomes Fn::ImportValue
+  userPoolId: api.userPool.userPoolId,   // 🔥 becomes Fn::ImportValue
+});
 ```
+
+### ✅ Cross-stack discovery via SSM Parameter Store
+
+**Write** parameters in the producer stack. **Read** them via
+`StringParameter.valueForStringParameter` in the consumer stack. This
+uses SSM dynamic references at deploy time — no CloudFormation
+exports, no deadlock.
+
+```typescript
+// Producer: write SSM parameters
+class ApiStack extends Stack {
+  constructor(scope: Construct, id: string) {
+    super(scope, id);
+
+    const userPool = new cognito.UserPool(this, 'UserPool');
+    const userPoolClient = userPool.addClient('Client');
+    const api = new apigateway.RestApi(this, 'Api');
+
+    new ssm.StringParameter(this, 'ApiUrlParam', {
+      parameterName: '/edgesignal/api/url',
+      stringValue: api.url,
+    });
+    new ssm.StringParameter(this, 'UserPoolIdParam', {
+      parameterName: '/edgesignal/cognito/user-pool-id',
+      stringValue: userPool.userPoolId,
+    });
+    new ssm.StringParameter(this, 'UserPoolClientIdParam', {
+      parameterName: '/edgesignal/cognito/user-pool-client-id',
+      stringValue: userPoolClient.userPoolClientId,
+    });
+  }
+}
+
+// Consumer: read SSM dynamic references — no cross-stack exports
+class FrontendStack extends Stack {
+  constructor(scope: Construct, id: string) {
+    super(scope, id);
+
+    const apiUrl = ssm.StringParameter.valueForStringParameter(
+      this, '/edgesignal/api/url',
+    );
+    const userPoolId = ssm.StringParameter.valueForStringParameter(
+      this, '/edgesignal/cognito/user-pool-id',
+    );
+    const userPoolClientId = ssm.StringParameter.valueForStringParameter(
+      this, '/edgesignal/cognito/user-pool-client-id',
+    );
+
+    // Write a runtime config bundle the frontend reads at startup
+    new s3deploy.BucketDeployment(this, 'ConfigDeployment', {
+      destinationBucket: siteBucket,
+      sources: [
+        s3deploy.Source.jsonData('config.json', {
+          apiUrl,
+          userPoolId,
+          userPoolClientId,
+        }),
+      ],
+    });
+  }
+}
+
+// Wire them at the app level — producer-first ordering
+const api = new ApiStack(app, 'EdgeSignal-Api');
+const frontend = new FrontendStack(app, 'EdgeSignal-Frontend');
+frontend.addDependency(api);  // producer before consumer on clean deploy
+```
+
+**Client-side**: the Vite/React app loads `/config.json` at startup and
+falls back to `VITE_*` env vars for local dev:
+
+```typescript
+// dashboard/src/config/runtime.ts
+let runtime: { apiUrl: string; userPoolId: string; userPoolClientId: string } | null = null;
+
+export async function loadRuntimeConfig() {
+  try {
+    runtime = await (await fetch('/config.json')).json();
+  } catch {
+    runtime = {
+      apiUrl: import.meta.env.VITE_API_URL,
+      userPoolId: import.meta.env.VITE_USER_POOL_ID,
+      userPoolClientId: import.meta.env.VITE_USER_POOL_CLIENT_ID,
+    };
+  }
+}
+export function getRuntimeConfig() {
+  if (!runtime) throw new Error('runtime config not loaded');
+  return runtime;
+}
+
+// main.tsx: await loadRuntimeConfig() before configureAmplify() + render
+```
+
+### When `CfnOutput` is still OK
+
+`CfnOutput` **without** `exportName` is fine as operator convenience —
+it surfaces values in the CloudFormation console's Outputs tab without
+creating any cross-stack binding:
+
+```typescript
+// OK — console convenience, no cross-stack export
+new CfnOutput(this, 'ApiUrl', {
+  value: api.url,
+  description: 'API Gateway URL (for operators)',
+  // no exportName — no CloudFormation export created
+});
+```
+
+The `cdk-no-cross-stack-exports` lint catches both `exportName` in
+`Outputs` and `Fn::ImportValue` in `Resources` at synth time. Golden
+principle **P-10**. Remediation: [`docs/references/cross-stack-ssm-llms.txt`](../../../aws-harness/templates/docs/references/cross-stack-ssm-llms.txt).
 
 ## Summary
 

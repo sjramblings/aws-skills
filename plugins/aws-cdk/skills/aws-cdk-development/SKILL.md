@@ -264,7 +264,13 @@ gateway.add_lambda_target("MyTarget",
 
 - Use nested stacks for complex applications
 - Separate concerns into logical construct boundaries
-- Export values that other stacks may need
+- **Cross-stack discovery via SSM Parameter Store, not CloudFormation
+  exports.** Producer stacks write `ssm.StringParameter`; consumer
+  stacks read via `StringParameter.valueForStringParameter`. Never use
+  `CfnOutput` with `exportName`, and never pass construct attributes as
+  props across stacks — both create CloudFormation `Export` /
+  `Fn::ImportValue` pairs that deadlock updates (see `cdk-patterns.md`
+  and golden principle **P-10**).
 - Use CDK context for environment-specific configuration
 
 ### Testing Strategy
