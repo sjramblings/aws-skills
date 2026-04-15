@@ -1,0 +1,241 @@
+---
+owner: "@{{OWNER}}"
+updated: 2026-04-15
+status: active
+---
+
+# Cross-Stack Discovery via SSM — Remediation reference (llms.txt)
+
+Referenced by `tools/lints/cdk-no-cross-stack-exports.ts`. Auto-loaded
+into agent context whenever the lint fires. Implements golden principle
+**P-10**.
+
+## Why this exists
+
+**Incident (2026-04-15, EdgeSignal):** `EdgeSignal-Frontend` was
+pulling the API URL and Cognito user-pool tokens from `EdgeSignal-Api`.
+CDK turned those into CloudFormation `Export` / `Fn::ImportValue` pairs
+at synth time. When `Api` was updated in a way that removed those
+exports, CloudFormation **refused** the update because `Frontend` still
+imported them (`ExportsOutputRefUserPool6BA7E5F296FD7236`). The
+two stacks deadlocked.
+
+This is not an edge case. Any time you pass a construct attribute
+across a stack boundary — either via `CfnOutput` with `exportName` or
+by threading the attribute through constructor props — CDK creates a
+cross-stack export. Once a consumer holds it, the producer is pinned.
+
+## The rule
+
+**Never** use `CfnOutput` with `exportName` for inter-stack wiring.
+**Never** pass construct attributes (`.url`, `.userPoolId`, `.tableName`,
+etc.) across stack boundaries via constructor props. Both become
+`Fn::ImportValue` at synth time.
+
+**Always** publish cross-stack values as SSM `StringParameter` in the
+producer stack, and read them via
+`StringParameter.valueForStringParameter` in the consumer. SSM dynamic
+references resolve at deploy time — no CloudFormation export/import
+pair is created.
+
+## Pattern
+
+### Producer — write SSM parameters
+
+```typescript
+// lib/api-stack.ts
+import * as cdk from "aws-cdk-lib";
+import * as cognito from "aws-cdk-lib/aws-cognito";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as ssm from "aws-cdk-lib/aws-ssm";
+import { Construct } from "constructs";
+
+export class ApiStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+
+    const userPool = new cognito.UserPool(this, "UserPool");
+    const userPoolClient = userPool.addClient("Client");
+    const api = new apigateway.RestApi(this, "Api");
+
+    new ssm.StringParameter(this, "ApiUrlParam", {
+      parameterName: "/edgesignal/api/url",
+      stringValue: api.url,
+    });
+    new ssm.StringParameter(this, "UserPoolIdParam", {
+      parameterName: "/edgesignal/cognito/user-pool-id",
+      stringValue: userPool.userPoolId,
+    });
+    new ssm.StringParameter(this, "UserPoolClientIdParam", {
+      parameterName: "/edgesignal/cognito/user-pool-client-id",
+      stringValue: userPoolClient.userPoolClientId,
+    });
+  }
+}
+```
+
+No `CfnOutput` with `exportName`. No public readonly fields exposed
+for other stacks to read. Producer is fully standalone.
+
+### Consumer — read SSM dynamic references
+
+```typescript
+// lib/frontend-stack.ts
+import * as cdk from "aws-cdk-lib";
+import * as s3 from "aws-cdk-lib/aws-s3";
+import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
+import * as ssm from "aws-cdk-lib/aws-ssm";
+import { Construct } from "constructs";
+
+export class FrontendStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+
+    // SSM dynamic references — resolved at deploy time, NO cross-stack binding.
+    const apiUrl = ssm.StringParameter.valueForStringParameter(
+      this,
+      "/edgesignal/api/url",
+    );
+    const userPoolId = ssm.StringParameter.valueForStringParameter(
+      this,
+      "/edgesignal/cognito/user-pool-id",
+    );
+    const userPoolClientId = ssm.StringParameter.valueForStringParameter(
+      this,
+      "/edgesignal/cognito/user-pool-client-id",
+    );
+
+    const siteBucket = new s3.Bucket(this, "SiteBucket");
+
+    new s3deploy.BucketDeployment(this, "SiteDeployment", {
+      destinationBucket: siteBucket,
+      sources: [
+        s3deploy.Source.asset("dashboard/dist"),
+        // Ship a runtime config bundle alongside the Vite build.
+        s3deploy.Source.jsonData("config.json", {
+          apiUrl,
+          userPoolId,
+          userPoolClientId,
+        }),
+      ],
+    });
+  }
+}
+```
+
+The consumer has **no** `props.apiUrl`, no `ApiStack` import, no handle
+on any producer construct. It reads three strings from SSM and that's
+it.
+
+### App wiring — producer first via `addDependency`
+
+```typescript
+// bin/edgesignal.ts
+import * as cdk from "aws-cdk-lib";
+import { ApiStack } from "../lib/api-stack";
+import { FrontendStack } from "../lib/frontend-stack";
+
+const app = new cdk.App();
+
+const api = new ApiStack(app, "EdgeSignal-Api");
+const frontend = new FrontendStack(app, "EdgeSignal-Frontend");
+
+// On a clean deploy, Api must run first so the SSM parameters exist
+// before Frontend reads them. addDependency is the explicit ordering.
+frontend.addDependency(api);
+```
+
+`addDependency` is essential on a clean deploy — without it,
+CloudFormation may try to deploy `Frontend` before `Api` has written
+the parameters and the deploy will fail with `ParameterNotFound`.
+
+### Client-side — load config.json at startup
+
+```typescript
+// dashboard/src/config/runtime.ts
+let runtime: {
+  apiUrl: string;
+  userPoolId: string;
+  userPoolClientId: string;
+} | null = null;
+
+export async function loadRuntimeConfig() {
+  try {
+    const res = await fetch("/config.json");
+    runtime = await res.json();
+  } catch {
+    // Fallback: Vite env vars for local dev
+    runtime = {
+      apiUrl: import.meta.env.VITE_API_URL,
+      userPoolId: import.meta.env.VITE_USER_POOL_ID,
+      userPoolClientId: import.meta.env.VITE_USER_POOL_CLIENT_ID,
+    };
+  }
+}
+
+export function getRuntimeConfig() {
+  if (!runtime) throw new Error("runtime config not loaded");
+  return runtime;
+}
+```
+
+```typescript
+// dashboard/src/main.tsx
+import { loadRuntimeConfig, getRuntimeConfig } from "./config/runtime";
+import { configureAmplify } from "./amplify";
+
+async function bootstrap() {
+  await loadRuntimeConfig();
+  const cfg = getRuntimeConfig();
+  configureAmplify(cfg);
+  // ...then render the app
+}
+bootstrap();
+```
+
+```typescript
+// dashboard/src/api/client.ts
+import { getRuntimeConfig } from "../config/runtime";
+
+export function apiUrl(path: string) {
+  return `${getRuntimeConfig().apiUrl}${path}`;
+}
+```
+
+## When `CfnOutput` is still OK
+
+`CfnOutput` **without** `exportName` is fine as an operator convenience
+— the value shows up in the CloudFormation console's Outputs tab, but
+no cross-stack binding is created and nothing pins the stack:
+
+```typescript
+// OK — console convenience, no cross-stack export
+new cdk.CfnOutput(this, "ApiUrlForOperators", {
+  value: api.url,
+  description: "API Gateway URL — console convenience, not exported",
+  // no exportName — safe
+});
+```
+
+## Recovery — if you already have cross-stack exports in prod
+
+1. In the **consumer**, replace every `Fn::ImportValue` usage with an
+   SSM `StringParameter.valueForStringParameter` call.
+2. Add SSM writes in the **producer** for the same values.
+3. Deploy **consumer first** — it still works because the old
+   `Fn::ImportValue` path has been removed; the new SSM path reads the
+   freshly-written parameters.
+4. Once the consumer is no longer importing, deploy the producer and
+   drop the `CfnOutput exportName` entries.
+5. `cdk synth` and confirm no `Fn::ImportValue` or `Export.Name`
+   remains in either template — the `cdk-no-cross-stack-exports` lint
+   will flag any you missed.
+
+## References
+
+- `tools/lints/cdk-no-cross-stack-exports.ts`
+- `plugins/aws-cdk/skills/aws-cdk-development/references/cdk-patterns.md` → "Cross-stack references via CloudFormation exports"
+- Golden principle: **P-10**
+- Learning: `plugins/aws-harness/docs/learnings/2026-04-15-cross-stack-export-deadlock.md`
+- [AWS CDK docs: Cross-stack references](https://docs.aws.amazon.com/cdk/v2/guide/resources.html#resource_stack)
+- [SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
