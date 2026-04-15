@@ -11,8 +11,8 @@ project-level `docs/QUALITY_SCORE.md` files (which the harness scaffolds
 into target projects). This file tracks how well the **harness** is
 working across all projects that use it.
 
-Updated by the `harness-self-review.yml` weekly cron (M9) and by
-manual review.
+Updated by `plugins/aws-harness/scripts/harness-self-review.sh` (local
+weekly cron, M9) and by manual review.
 
 ## Current scores (0–10)
 
@@ -33,6 +33,7 @@ manual review.
 | Week | Patterns found | Trigger | Notes |
 |---|---|---|---|
 | 2026-W15 | (initial) | M9 ship | First mine baseline |
+| 2026-W16 | 3 | weekly self-review | First real run from local script |
 
 ## Graduation gate
 

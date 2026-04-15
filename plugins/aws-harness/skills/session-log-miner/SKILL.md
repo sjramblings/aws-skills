@@ -4,7 +4,8 @@ description: >-
   Mines Claude Code session transcripts (`~/.claude/projects/*/*.jsonl`)
   for friction patterns. Use when the user says "mine session logs",
   "session friction", "harness telemetry", "what's the agent struggling
-  with", or invoked weekly by harness-self-review.yml. Extracts six
+  with", or invoked weekly by `plugins/aws-harness/scripts/harness-self-review.sh`
+  (a local script — see Scheduling below). Extracts six
   friction event classes (repeated tool failures, aborted tool calls,
   long stuck turns, missing-access patterns, raw AWS blob reads,
   AGENTS.md lookup misses) and emits compact JSON for the

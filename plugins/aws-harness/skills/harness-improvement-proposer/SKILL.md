@@ -5,7 +5,9 @@ description: >-
   and drafts improvement proposals as GitHub issues against the aws-skills
   repo. Use when the user says "propose harness improvements", "harness
   upgrades", "what should we improve", "review session friction", or
-  invoked weekly by harness-self-review.yml. Each proposal is an issue
+  invoked weekly by `plugins/aws-harness/scripts/harness-self-review.sh`
+  (a local script — runs on Steve's machine where the session logs
+  live). Each proposal is an issue
   (never an auto-PR — human triage required) labeled
   `harness-self-improvement`, with the worst exemplar session IDs linked
   for reproduction.
@@ -30,7 +32,7 @@ The hands of the M9 meta-loop. The miner's eyes find friction; this skill turns 
 
 ## When invoked
 
-- Auto: weekly cron via `harness-self-review.yml` in the `aws-skills` repo.
+- Auto: weekly via `plugins/aws-harness/scripts/harness-self-review.sh` (local script — schedule via launchd / cron; see the Scheduling block at the bottom of the script).
 - Manual: when Steve runs `propose harness improvements` or after a particularly painful session.
 
 ## Inputs

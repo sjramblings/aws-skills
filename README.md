@@ -367,14 +367,30 @@ The `architecture-drift-detector` runs in the same workflow and opens a deduped 
 
 #### 8. The harness improves itself
 
-A weekly cron (`harness-self-review.yml`) runs `session-log-miner` against your `~/.claude/projects/*/*.jsonl` files, looking for friction patterns:
+Run the local self-review script:
+
+```bash
+bash plugins/aws-harness/scripts/harness-self-review.sh             # dry-run preview
+bash plugins/aws-harness/scripts/harness-self-review.sh --open-issues
+```
+
+The script runs `session-log-miner` against your `~/.claude/projects/*/*.jsonl` files, looking for friction patterns:
+
 - Raw `aws` calls bypassing the legibility wrappers
 - Repeated tool failures
 - Long stuck reasoning turns
 - Capability gaps
 - AGENTS.md lookup misses
 
-Then `harness-improvement-proposer` clusters them and opens GitHub issues against `aws-skills` itself with proposed fix types (skill-upgrade, new-skill, new-lint, new-reference-doc, hook-change). **Issues, never PRs** — human triage required. The harness now improves itself from its own usage telemetry.
+Then `harness-improvement-proposer` clusters them and opens GitHub issues against `aws-skills` itself with proposed fix types (skill-upgrade, new-skill, new-lint, new-reference-doc, hook-change). **Issues, never PRs** — human triage required.
+
+This is intentionally a **local script, not a GHA workflow** — the session logs live on your machine, not on GitHub-hosted runners. Schedule it weekly via launchd (a starter `plugins/aws-harness/scripts/com.sjramblings.harness-self-review.plist` is included for macOS) or cron:
+
+```cron
+0 10 * * 0 cd /path/to/aws-skills && bash plugins/aws-harness/scripts/harness-self-review.sh --open-issues
+```
+
+The harness now improves itself from its own usage telemetry.
 
 ### AI Agent Development
 
@@ -438,6 +454,9 @@ Configure observability for my AgentCore runtime with CloudWatch dashboards
 │   └── aws-harness/                  # Claude Code AWS harness (M0–M9, v1.0)
 │       ├── commands/
 │       │   └── harness-init.md       # /harness-init slash command
+│       ├── scripts/                  # Local maintainer scripts
+│       │   ├── harness-self-review.sh    # M9 weekly meta-loop runner
+│       │   └── com.sjramblings.harness-self-review.plist  # macOS launchd
 │       ├── skills/                   # 17 skills across 9 milestones
 │       │   ├── harness-init/
 │       │   ├── cfn-stack-events/         # M1 — legibility
@@ -484,8 +503,6 @@ Configure observability for my AgentCore runtime with CloudWatch dashboards
 │           │   └── scripts/          # pr-stack-budget.sh, etc.
 │           └── cdk/lib/
 │               └── cost-instrumentation.ts  # Bedrock cost tracking
-├── .github/workflows/
-│   └── harness-self-review.yml       # M9 weekly meta-loop cron
 └── README.md
 ```
 
